@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: erp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: erp
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: erp-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    ports:
+      - "6380:6379"
+    networks:
+      - erp-network
+
+  employee-service:
+    build:
+      context: ./backend/employee-service
+      dockerfile: Dockerfile
+    container_name: employee-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/erp
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - erp-network
+
+  approval-request-service:
+    build:
+      context: ./backend
+      dockerfile: approval-request-service/Dockerfile
+    container_name: approval-request-service
+    ports:
+      - "8082:8082"
+      - "9091:9091"
+    environment:
+      SPRING_DATA_MONGODB_HOST: mongodb
+      SPRING_DATA_MONGODB_PORT: 27017
+      SPRING_DATA_MONGODB_DATABASE: erp
+      EMPLOYEE_SERVICE_URL: http://employee-service:8081
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+      GRPC_CLIENT_APPROVALPROCESSINGSERVICE_ADDRESS: static://approval-processing-service:9090
+      GRPC_CLIENT_APPROVALPROCESSINGSERVICE_NEGOTIATIONTYPE: plaintext
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      employee-service:
+        condition: service_started
+    networks:
+      - erp-network
+
+  approval-processing-service:
+    build:
+      context: ./backend
+      dockerfile: approval-processing-service/Dockerfile
+    container_name: approval-processing-service
+    ports:
+      - "8083:8083"
+      - "9090:9090"
+    environment:
+      GRPC_CLIENT_APPROVALREQUESTSERVICE_ADDRESS: static://approval-request-service:9091
+      GRPC_CLIENT_APPROVALREQUESTSERVICE_NEGOTIATIONTYPE: plaintext
+    depends_on:
+      approval-request-service:
+        condition: service_started
+    networks:
+      - erp-network
+
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - "8084:8084"
+    networks:
+      - erp-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: erp-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - employee-service
+      - approval-request-service
+      - approval-processing-service
+    networks:
+      - erp-network
+
+volumes:
+  mysql-data:
+  mongodb-data:
+
+networks:
+  erp-network:
+    driver: bridge

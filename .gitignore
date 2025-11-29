@@ -1,0 +1,39 @@
+# Java/Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node/React
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+package-lock.json
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Reports
+제출보고서/

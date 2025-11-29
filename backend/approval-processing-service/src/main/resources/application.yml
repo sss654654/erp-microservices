@@ -1,0 +1,14 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: approval-processing-service
+
+grpc:
+  server:
+    port: 9090
+  client:
+    approvalrequestservice:
+      address: static://approval-request-service:9091
+      negotiationType: plaintext
