@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
 
 const employeeAPI = axios.create({
-  baseURL: 'http://localhost:8081',
+  baseURL: API_ENDPOINTS.EMPLOYEE,
 });
 
 export const employeeService = {

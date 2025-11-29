@@ -1,0 +1,8 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost';
+
+export const API_ENDPOINTS = {
+  EMPLOYEE: `${API_BASE_URL}:8081`,
+  APPROVAL_REQUEST: `${API_BASE_URL}:8082`,
+  APPROVAL_PROCESSING: `${API_BASE_URL}:8083`,
+  NOTIFICATION: `${API_BASE_URL}:8084`,
+};

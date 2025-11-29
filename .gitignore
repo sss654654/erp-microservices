@@ -31,8 +31,7 @@ package-lock.json
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
+# Environment (keep .env.production for deployment)
 .env.local
 
 # Reports

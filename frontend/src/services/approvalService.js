@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
 
 const approvalRequestAPI = axios.create({
-  baseURL: 'http://localhost:8082',
+  baseURL: API_ENDPOINTS.APPROVAL_REQUEST,
 });
 
 export const approvalService = {
