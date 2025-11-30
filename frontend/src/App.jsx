@@ -3,6 +3,7 @@ import EmployeeManagement from './components/EmployeeManagement';
 import CreateApproval from './components/CreateApproval';
 import ApprovalQueue from './components/ApprovalQueue';
 import AllApprovals from './components/AllApprovals';
+import Notifications from './components/Notifications';
 import './App.css';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
       </header>
 
       <main className="main-content">
+        <Notifications />
         <EmployeeManagement />
         <CreateApproval onSuccess={handleSuccess} />
         <ApprovalQueue approverId={approverId} refresh={refreshKey} />
