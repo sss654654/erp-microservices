@@ -12,10 +12,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // 메시지 브로커 설정
+        // Redis 기반 메시지 브로커 설정
         // /topic: 브로드캐스트 (모든 구독자)
         // /queue: 개인 메시지 (특정 사용자)
-        config.enableSimpleBroker("/topic", "/queue");
+        config.enableSimpleBroker("/topic", "/queue")
+                .setTaskScheduler(null);  // Redis로 세션 공유
         
         // 클라이언트가 서버로 메시지 전송 시 prefix
         config.setApplicationDestinationPrefixes("/app");
