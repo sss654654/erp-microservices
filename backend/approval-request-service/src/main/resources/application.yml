@@ -6,22 +6,20 @@ spring:
     name: approval-request-service
   data:
     mongodb:
-      host: localhost
-      port: 27017
-      database: erp
+      uri: ${MONGODB_URI:mongodb://localhost:27017/erp}
 
 employee:
   service:
-    url: http://employee-service:8081
+    url: ${EMPLOYEE_SERVICE_URL:http://employee-service:8081}
 
 notification:
   service:
-    url: http://notification-service:8084
+    url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8084}
 
 grpc:
   server:
     port: 9091
   client:
     approvalprocessingservice:
-      address: static://approval-processing-service:9090
+      address: ${APPROVAL_PROCESSING_GRPC_ADDRESS:static://approval-processing-service:9090}
       negotiationType: plaintext

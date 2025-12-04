@@ -10,5 +10,5 @@ grpc:
     port: 9090
   client:
     approvalrequestservice:
-      address: static://approval-request-service:9091
+      address: ${APPROVAL_REQUEST_GRPC_ADDRESS:static://approval-request-service:9091}
       negotiationType: plaintext
