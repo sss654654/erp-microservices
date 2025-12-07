@@ -3,6 +3,7 @@ version: 0.2
 phases:
   pre_build:
     commands:
+      - cd backend/approval-processing-service
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com
       - echo Updating kubeconfig...
