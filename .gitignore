@@ -34,5 +34,16 @@ Thumbs.db
 # Environment (keep .env.production for deployment)
 .env.local
 
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+*.tfvars
+
+# Kubernetes Secrets (use External Secrets Operator instead)
+manifests/secret.yaml
+
 # Reports
 제출보고서/

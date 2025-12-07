@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: approval-request-service
+  namespace: default
+  labels:
+    app: approval-request-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: approval-request-service
+  template:
+    metadata:
+      labels:
+        app: approval-request-service
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - approval-request-service
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+      - name: approval-request-service
+        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-request-service:latest
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        ports:
+        - containerPort: 8082
+          name: http
+        - containerPort: 9091
+          name: grpc
+        env:
+        - name: SPRING_DATA_MONGODB_URI
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: MONGODB_URI
+        - name: EMPLOYEE_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: EMPLOYEE_SERVICE_URL
+        - name: NOTIFICATION_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: NOTIFICATION_SERVICE_URL
+        - name: GRPC_CLIENT_APPROVALPROCESSINGSERVICE_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: GRPC_APPROVAL_PROCESSING_ADDRESS
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /approvals
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /approvals
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 5

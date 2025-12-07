@@ -3,15 +3,13 @@ spring:
     name: employee-service
   
   datasource:
-    # Docker Compose에서는 서비스 이름으로 접속
-    url: jdbc:mysql://mysql:3306/erp?useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root1234
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://mysql:3306/erp?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root1234}
     driver-class-name: com.mysql.cj.jdbc.Driver
   
   jpa:
     hibernate:
-      # 테이블 자동 생성 (개발용)
       ddl-auto: update
     show-sql: true
     properties:
