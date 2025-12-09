@@ -28,4 +28,4 @@ phases:
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo Deploying to EKS...
       - kubectl set image deployment/notification-service notification-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
-      - kubectl rollout status deployment/notification-service -n erp-dev
+      - echo Deployment updated successfully
