@@ -12,6 +12,7 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import com.erp.notification.listener.RedisMessageSubscriber;
 import com.erp.notification.model.NotificationMessage;
 
 @Configuration
