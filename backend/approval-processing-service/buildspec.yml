@@ -27,5 +27,5 @@ phases:
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo Deploying to EKS...
-      - kubectl set image deployment/approval-processing-service approval-processing-service=$REPOSITORY_URI:$IMAGE_TAG -n default
-      - kubectl rollout status deployment/approval-processing-service -n default
+      - kubectl set image deployment/approval-processing-service approval-processing-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
+      - kubectl rollout status deployment/approval-processing-service -n erp-dev

@@ -27,5 +27,5 @@ phases:
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo Deploying to EKS...
-      - kubectl set image deployment/employee-service employee-service=$REPOSITORY_URI:$IMAGE_TAG -n default
-      - kubectl rollout status deployment/employee-service -n default
+      - kubectl set image deployment/employee-service employee-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
+      - kubectl rollout status deployment/employee-service -n erp-dev
