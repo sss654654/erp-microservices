@@ -3,6 +3,7 @@ package com.erp.employee.service;
 import com.erp.employee.dto.EmployeeRequest;
 import com.erp.employee.dto.EmployeeUpdateRequest;
 import com.erp.employee.entity.Employee;
+import com.erp.employee.exception.EmployeeNotFoundException;
 import com.erp.employee.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,7 @@ public class EmployeeService {
     @Transactional(readOnly = true)
     public Employee getEmployeeById(Long id) {
         return employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("직원을 찾을 수 없습니다: " + id));
+            .orElseThrow(() -> new EmployeeNotFoundException(id));
     }
     
     // 수정 (department, position만)
@@ -74,7 +75,7 @@ public class EmployeeService {
     @Transactional
     public void deleteEmployee(Long id) {
         if (!employeeRepository.existsById(id)) {
-            throw new RuntimeException("직원을 찾을 수 없습니다: " + id);
+            throw new EmployeeNotFoundException(id);
         }
         employeeRepository.deleteById(id);
     }

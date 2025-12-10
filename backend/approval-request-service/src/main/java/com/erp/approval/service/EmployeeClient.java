@@ -1,6 +1,7 @@
 package com.erp.approval.service;
 
 import com.erp.approval.dto.EmployeeResponse;
+import com.erp.approval.exception.EmployeeNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +21,7 @@ public class EmployeeClient {
     @Value("${employee.service.url}")
     private String employeeServiceUrl;
     
-    public boolean validateEmployee(Long employeeId) {
+    public void validateEmployee(Long employeeId) {
         try {
             String url = employeeServiceUrl + "/employees/" + employeeId;
             log.debug("Validating employee: {}", url);
@@ -28,13 +29,15 @@ public class EmployeeClient {
             ResponseEntity<EmployeeResponse> response = 
                 restTemplate.getForEntity(url, EmployeeResponse.class);
             
-            return response.getStatusCode() == HttpStatus.OK;
+            if (response.getStatusCode() != HttpStatus.OK) {
+                throw new EmployeeNotFoundException(employeeId);
+            }
         } catch (HttpClientErrorException.NotFound e) {
             log.warn("Employee not found: {}", employeeId);
-            return false;
+            throw new EmployeeNotFoundException(employeeId);
         } catch (Exception e) {
             log.error("Error validating employee: {}", employeeId, e);
-            return false;
+            throw new EmployeeNotFoundException(employeeId);
         }
     }
 }

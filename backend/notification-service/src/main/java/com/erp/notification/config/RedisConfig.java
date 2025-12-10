@@ -14,6 +14,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import com.erp.notification.listener.RedisMessageSubscriber;
 import com.erp.notification.model.NotificationMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 @Configuration
 public class RedisConfig {
@@ -35,7 +37,14 @@ public class RedisConfig {
         RedisTemplate<String, NotificationMessage> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new Jackson2JsonRedisSerializer<>(NotificationMessage.class));
+        
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        
+        Jackson2JsonRedisSerializer<NotificationMessage> serializer = 
+            new Jackson2JsonRedisSerializer<>(objectMapper, NotificationMessage.class);
+        
+        template.setValueSerializer(serializer);
         return template;
     }
     

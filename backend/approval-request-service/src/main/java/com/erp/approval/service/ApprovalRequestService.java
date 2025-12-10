@@ -2,6 +2,8 @@ package com.erp.approval.service;
 
 import com.erp.approval.document.ApprovalRequest;
 import com.erp.approval.dto.CreateApprovalRequest;
+import com.erp.approval.exception.ApprovalNotFoundException;
+import com.erp.approval.exception.InvalidStepsException;
 import com.erp.approval.grpc.ProcessingGrpcClient;
 import com.erp.approval.repository.ApprovalRequestRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,7 +55,7 @@ public class ApprovalRequestService {
         
         for (int i = 0; i < stepNumbers.size(); i++) {
             if (stepNumbers.get(i) != i + 1) {
-                throw new IllegalArgumentException("Steps must be sequential starting from 1");
+                throw new InvalidStepsException("Steps must be sequential starting from 1");
             }
         }
         
@@ -94,7 +96,7 @@ public class ApprovalRequestService {
     
     public void handleApprovalResult(Integer requestId, Integer step, Integer approverId, String status) {
         ApprovalRequest approval = repository.findByRequestId(requestId)
-                .orElseThrow(() -> new RuntimeException("Approval not found"));
+                .orElseThrow(() -> new ApprovalNotFoundException(requestId));
         
         // 해당 단계 업데이트
         approval.getSteps().stream()
@@ -163,7 +165,7 @@ public class ApprovalRequestService {
     
     public ApprovalRequest getApprovalById(Integer requestId) {
         return repository.findByRequestId(requestId)
-                .orElseThrow(() -> new RuntimeException("Approval not found"));
+                .orElseThrow(() -> new ApprovalNotFoundException(requestId));
     }
     
     public void deleteAll() {
