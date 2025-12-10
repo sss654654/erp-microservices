@@ -1,6 +1,6 @@
 package com.erp.processing.grpc;
 
-import com.erp.processing.storage.InMemoryApprovalStorage;
+import com.erp.processing.storage.RedisApprovalStorage;
 import com.erp.proto.*;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -8,9 +8,9 @@ import net.devh.boot.grpc.server.service.GrpcService;
 @GrpcService
 public class ApprovalGrpcService extends ApprovalGrpc.ApprovalImplBase {
     
-    private final InMemoryApprovalStorage storage;
+    private final RedisApprovalStorage storage;
     
-    public ApprovalGrpcService(InMemoryApprovalStorage storage) {
+    public ApprovalGrpcService(RedisApprovalStorage storage) {
         this.storage = storage;
     }
     

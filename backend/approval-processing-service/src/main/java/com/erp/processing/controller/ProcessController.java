@@ -1,7 +1,7 @@
 package com.erp.processing.controller;
 
 import com.erp.processing.grpc.ApprovalResultClient;
-import com.erp.processing.storage.InMemoryApprovalStorage;
+import com.erp.processing.storage.RedisApprovalStorage;
 import com.erp.proto.ApprovalRequest;
 import com.erp.proto.Step;
 import org.springframework.http.ResponseEntity;
@@ -16,10 +16,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/process")
 public class ProcessController {
     
-    private final InMemoryApprovalStorage storage;
+    private final RedisApprovalStorage storage;
     private final ApprovalResultClient resultClient;
     
-    public ProcessController(InMemoryApprovalStorage storage, ApprovalResultClient resultClient) {
+    public ProcessController(RedisApprovalStorage storage, ApprovalResultClient resultClient) {
         this.storage = storage;
         this.resultClient = resultClient;
     }
