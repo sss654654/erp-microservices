@@ -1,154 +1,118 @@
-# ERP 프로젝트 Terraform 인프라
+# Infrastructure
 
-## 디렉토리 구조
+Terraform으로 관리되는 AWS 인프라입니다.
+
+## 구조
+
+9개 폴더로 세분화하여 독립 배포 및 State 분리를 구현했습니다.
 
 ```
-terraform/dev/
-├── erp-dev-VPC/              # VPC, Subnet, Route Table (세분화)
-├── erp-dev-SecurityGroups/   # Security Groups (세분화)
-├── erp-dev-IAM/              # IAM Roles (통합)
-├── erp-dev-Databases/        # RDS, ElastiCache (세분화)
-├── erp-dev-EKS/              # EKS Cluster (통합)
-├── erp-dev-ALB/              # Application Load Balancer (통합)
-└── erp-dev-Secrets/          # Secrets Manager (통합)
+infrastructure/terraform/dev/
+├── erp-dev-VPC/                    # VPC, Subnet, NAT Gateway (22개 리소스)
+├── erp-dev-SecurityGroups/         # Security Groups (22개 리소스)
+├── erp-dev-IAM/                    # IAM Roles, Policies (18개 리소스)
+├── erp-dev-Databases/              # RDS, ElastiCache (22개 리소스)
+├── erp-dev-Secrets/                # Secrets Manager (4개 리소스)
+├── erp-dev-EKS/                    # EKS Cluster, Node Group (11개 리소스)
+├── erp-dev-LoadBalancerController/ # AWS Load Balancer Controller (10개 리소스)
+├── erp-dev-APIGateway/             # API Gateway, NLB (30개 리소스)
+└── erp-dev-Frontend/               # S3, CloudFront (4개 리소스)
 ```
 
-## 실행 순서
+**총 리소스**: 139개
 
-### 1. 환경변수 설정
+## 세분화 이유
+
+1. **독립 배포**: VPC 변경 시 EKS 재생성 불필요
+2. **State 분리**: State Lock 충돌 방지, 팀 협업 용이
+3. **빠른 Plan/Apply**: 15개 리소스씩 → 30초
+4. **재사용성**: dev, staging, prod 환경 재사용
+5. **무중단 리팩토링**: 점진적 마이그레이션
+
+## 배포 순서
 
 ```bash
-export TF_VAR_mysql_password="your-password"
+cd infrastructure/terraform/dev
+
+# 1. VPC (2분)
+cd erp-dev-VPC && terraform apply -auto-approve
+
+# 2. Security Groups (1분)
+cd ../erp-dev-SecurityGroups && terraform apply -auto-approve
+
+# 3. IAM (1분)
+cd ../erp-dev-IAM && terraform apply -auto-approve
+
+# 4. Databases (10분)
+cd ../erp-dev-Databases && terraform apply -auto-approve
+
+# 5. Secrets (1분)
+cd ../erp-dev-Secrets && terraform apply -auto-approve
+
+# 6. EKS (15분)
+cd ../erp-dev-EKS && terraform apply -auto-approve
+
+# 7. Load Balancer Controller (3분)
+cd ../erp-dev-LoadBalancerController && terraform apply -auto-approve
+
+# 8. API Gateway + NLB (5분)
+cd ../erp-dev-APIGateway && terraform apply -auto-approve
+
+# 9. Frontend (5분)
+cd ../erp-dev-Frontend && terraform apply -auto-approve
 ```
 
-### 2. VPC
+**총 소요 시간**: 약 40-45분
+
+## 주요 리소스
+
+### VPC
+- CIDR: 10.0.0.0/16
+- Public Subnet: 2개 (2a, 2c)
+- Private Subnet: 2개 (2a, 2c)
+- NAT Gateway: 2개 (고가용성)
+
+### EKS
+- Kubernetes: v1.31
+- Node Group: t3.small × 2~3 (Auto Scaling)
+- AZ: ap-northeast-2a, 2c
+
+### RDS
+- Engine: MySQL 8.0
+- Instance: db.t3.micro
+- Multi-AZ: Yes
+
+### ElastiCache
+- Engine: Redis 7.0
+- Instance: cache.t3.micro
+
+### API Gateway
+- Type: HTTP API
+- CORS: Enabled
+- VPC Link: Private
+
+### NLB
+- Type: Network Load Balancer
+- Cross-Zone Load Balancing: Enabled
+- Target Groups: 4개 (각 서비스별)
+
+## State 관리
+
+- **Backend**: S3 (erp-terraform-state-subin-bucket)
+- **Lock**: DynamoDB (erp-terraform-locks)
+
+## 삭제 순서
+
+역순으로 삭제:
 
 ```bash
-cd terraform/dev/erp-dev-VPC
-cd vpc && terraform init && terraform apply
-cd ../subnet && terraform init && terraform apply
-cd ../route-table && terraform init && terraform apply
-```
-
-### 3. SecurityGroups
-
-```bash
-cd ../../erp-dev-SecurityGroups
-cd alb-sg && terraform init && terraform apply
-cd ../eks-sg && terraform init && terraform apply
-cd ../rds-sg && terraform init && terraform apply
-cd ../elasticache-sg && terraform init && terraform apply
-```
-
-### 4. IAM
-
-```bash
-cd ../../erp-dev-IAM
-terraform init && terraform apply
-```
-
-### 5. Databases
-
-```bash
-cd ../erp-dev-Databases
-cd rds && terraform init && terraform apply
-cd ../elasticache && terraform init && terraform apply
-```
-
-### 6. EKS
-
-```bash
-cd ../../erp-dev-EKS
-terraform init && terraform apply
-```
-
-### 7. ALB
-
-```bash
-cd ../erp-dev-ALB
-terraform init && terraform apply
-```
-
-### 8. Secrets
-
-```bash
-cd ../erp-dev-Secrets
-terraform init && terraform apply
-```
-
-## 배포된 리소스
-
-| 리소스 | 개수 | 설명 |
-|--------|------|------|
-| VPC | 19 | VPC, Subnet, Route Table, NAT Gateway |
-| SecurityGroups | 11 | ALB, EKS, RDS, ElastiCache SG |
-| IAM | 13 | EKS Cluster Role, Node Role, CodeBuild Role |
-| Databases | 8 | RDS MySQL, ElastiCache Redis |
-| EKS | 6 | EKS Cluster, Node Group |
-| ALB | 13 | ALB, Target Groups, Listener Rules |
-| Secrets | 4 | Secrets Manager (MySQL 자격증명) |
-| **총합** | **74개** | |
-
-## 인프라 삭제 (역순)
-
-```bash
-cd terraform/dev
-
-# Secrets
-cd erp-dev-Secrets && terraform destroy -auto-approve
-
-# ALB
-cd ../erp-dev-ALB && terraform destroy -auto-approve
-
-# EKS
+cd erp-dev-Frontend && terraform destroy -auto-approve
+cd ../erp-dev-APIGateway && terraform destroy -auto-approve
+cd ../erp-dev-LoadBalancerController && terraform destroy -auto-approve
 cd ../erp-dev-EKS && terraform destroy -auto-approve
-
-# Databases
-cd ../erp-dev-Databases/elasticache && terraform destroy -auto-approve
-cd ../rds && terraform destroy -auto-approve
-
-# IAM
-cd ../../erp-dev-IAM && terraform destroy -auto-approve
-
-# SecurityGroups
-cd ../erp-dev-SecurityGroups/elasticache-sg && terraform destroy -auto-approve
-cd ../rds-sg && terraform destroy -auto-approve
-cd ../eks-sg && terraform destroy -auto-approve
-cd ../alb-sg && terraform destroy -auto-approve
-
-# VPC
-cd ../../erp-dev-VPC/route-table && terraform destroy -auto-approve
-cd ../subnet && terraform destroy -auto-approve
-cd ../vpc && terraform destroy -auto-approve
+cd ../erp-dev-Secrets && terraform destroy -auto-approve
+cd ../erp-dev-Databases && terraform destroy -auto-approve
+cd ../erp-dev-IAM && terraform destroy -auto-approve
+cd ../erp-dev-SecurityGroups && terraform destroy -auto-approve
+cd ../erp-dev-VPC && terraform destroy -auto-approve
 ```
-
-## tfstate 관리
-
-**S3 Backend:**
-- Bucket: `erp-terraform-state-subin-bucket`
-- DynamoDB: `erp-terraform-locks`
-
-**tfstate 경로:**
-```
-dev/vpc/vpc/terraform.tfstate
-dev/vpc/subnet/terraform.tfstate
-dev/vpc/route-table/terraform.tfstate
-dev/security-groups/alb-sg/terraform.tfstate
-dev/security-groups/eks-sg/terraform.tfstate
-dev/security-groups/rds-sg/terraform.tfstate
-dev/security-groups/elasticache-sg/terraform.tfstate
-dev/iam/terraform.tfstate
-dev/databases/rds/terraform.tfstate
-dev/databases/elasticache/terraform.tfstate
-dev/eks/terraform.tfstate
-dev/alb/terraform.tfstate
-dev/secrets/terraform.tfstate
-```
-
-## 주의사항
-
-1. **환경변수 필수:** `TF_VAR_mysql_password` 설정 필요
-2. **실행 순서 준수:** 의존성 때문에 순서대로 실행
-3. **RDS 생성 시간:** 약 5-10분 소요
-4. **EKS 생성 시간:** 약 10-15분 소요
-5. **삭제는 역순:** 의존성 때문에 역순으로 삭제

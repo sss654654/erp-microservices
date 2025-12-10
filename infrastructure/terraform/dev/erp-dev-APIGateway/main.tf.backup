@@ -1,0 +1,423 @@
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  
+  backend "s3" {
+    bucket         = "erp-terraform-state-subin-bucket"
+    key            = "dev/api-gateway/terraform.tfstate"
+    region         = "ap-northeast-2"
+    dynamodb_table = "erp-terraform-locks"
+    encrypt        = true
+  }
+}
+
+provider "aws" {
+  region = "ap-northeast-2"
+}
+
+# Remote state - ALB 정보 가져오기
+data "terraform_remote_state" "alb" {
+  backend = "s3"
+  config = {
+    bucket = "erp-terraform-state-subin-bucket"
+    key    = "dev/alb/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}
+
+data "terraform_remote_state" "vpc" {
+  backend = "s3"
+  config = {
+    bucket = "erp-terraform-state-subin-bucket"
+    key    = "dev/vpc/vpc/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}
+
+data "terraform_remote_state" "vpc_subnet" {
+  backend = "s3"
+  config = {
+    bucket = "erp-terraform-state-subin-bucket"
+    key    = "dev/vpc/subnet/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}
+
+# NLB 생성 (VPC Link용)
+resource "aws_lb" "nlb" {
+  name               = "erp-dev-nlb"
+  internal           = true
+  load_balancer_type = "network"
+  subnets            = data.terraform_remote_state.vpc_subnet.outputs.private_subnet_ids
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name        = "erp-dev-nlb"
+    Environment = "dev"
+  }
+}
+
+# NLB Target Groups (4개 서비스)
+resource "aws_lb_target_group" "employee" {
+  name        = "erp-dev-employee-nlb-tg"
+  port        = 8081
+  protocol    = "TCP"
+  target_type = "ip"
+  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
+
+  health_check {
+    enabled             = true
+    protocol            = "TCP"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "erp-dev-employee-nlb-tg"
+  }
+}
+
+resource "aws_lb_target_group" "approval_request" {
+  name        = "erp-dev-approval-req-nlb-tg"
+  port        = 8082
+  protocol    = "TCP"
+  target_type = "ip"
+  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
+
+  health_check {
+    enabled             = true
+    protocol            = "TCP"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "erp-dev-approval-req-nlb-tg"
+  }
+}
+
+resource "aws_lb_target_group" "approval_processing" {
+  name        = "erp-dev-approval-proc-nlb-tg"
+  port        = 8083
+  protocol    = "TCP"
+  target_type = "ip"
+  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
+
+  health_check {
+    enabled             = true
+    protocol            = "TCP"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "erp-dev-approval-proc-nlb-tg"
+  }
+}
+
+resource "aws_lb_target_group" "notification" {
+  name        = "erp-dev-notification-nlb-tg"
+  port        = 8084
+  protocol    = "TCP"
+  target_type = "ip"
+  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
+
+  health_check {
+    enabled             = true
+    protocol            = "TCP"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "erp-dev-notification-nlb-tg"
+  }
+}
+
+# NLB Listeners
+resource "aws_lb_listener" "employee" {
+  load_balancer_arn = aws_lb.nlb.arn
+  port              = 8081
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.employee.arn
+  }
+}
+
+resource "aws_lb_listener" "approval_request" {
+  load_balancer_arn = aws_lb.nlb.arn
+  port              = 8082
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.approval_request.arn
+  }
+}
+
+resource "aws_lb_listener" "approval_processing" {
+  load_balancer_arn = aws_lb.nlb.arn
+  port              = 8083
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.approval_processing.arn
+  }
+}
+
+resource "aws_lb_listener" "notification" {
+  load_balancer_arn = aws_lb.nlb.arn
+  port              = 8084
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.notification.arn
+  }
+}
+
+# VPC Link
+resource "aws_apigatewayv2_vpc_link" "main" {
+  name               = "erp-dev-vpc-link"
+  security_group_ids = ["sg-0a13cde3743d6ead9"]  # VPC default SG
+  subnet_ids         = data.terraform_remote_state.vpc_subnet.outputs.private_subnet_ids
+
+  tags = {
+    Name = "erp-dev-vpc-link"
+  }
+}
+
+# API Gateway HTTP API
+resource "aws_apigatewayv2_api" "main" {
+  name          = "erp-dev-api"
+  protocol_type = "HTTP"
+  description   = "ERP Microservices API Gateway"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["*"]
+    max_age       = 300
+  }
+
+  tags = {
+    Name = "erp-dev-api"
+  }
+}
+
+# Integrations (4개 서비스)
+resource "aws_apigatewayv2_integration" "employee" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.employee.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/employees/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "employee_root" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.employee.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/employees"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "approval_request" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.approval_request.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/approvals/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "approval_request_root" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.approval_request.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/approvals"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "approval_processing" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.approval_processing.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/process/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "notification" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.notification.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/notifications/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "notification_root" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = aws_lb_listener.notification.arn
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+  
+  request_parameters = {
+    "overwrite:path" = "/notifications"
+  }
+}
+
+# Routes (경로 기반 라우팅)
+resource "aws_apigatewayv2_route" "employee" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/employees/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.employee.id}"
+}
+
+resource "aws_apigatewayv2_route" "employee_root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/employees"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_root.id}"
+}
+
+resource "aws_apigatewayv2_route" "approval_request" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/approvals/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.approval_request.id}"
+}
+
+resource "aws_apigatewayv2_route" "approval_request_root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/approvals"
+  target    = "integrations/${aws_apigatewayv2_integration.approval_request_root.id}"
+}
+
+resource "aws_apigatewayv2_route" "approval_processing" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/process/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.approval_processing.id}"
+}
+
+resource "aws_apigatewayv2_route" "notification" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/notifications/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.notification.id}"
+}
+
+resource "aws_apigatewayv2_route" "notification_root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/notifications"
+  target    = "integrations/${aws_apigatewayv2_integration.notification_root.id}"
+}
+
+# Stage (배포)
+resource "aws_apigatewayv2_stage" "dev" {
+  api_id      = aws_apigatewayv2_api.main.id
+  name        = "dev"
+  auto_deploy = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+      protocol       = "$context.protocol"
+      responseLength = "$context.responseLength"
+    })
+  }
+
+  tags = {
+    Name = "erp-dev-api-stage"
+  }
+}
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "api_gateway" {
+  name              = "/aws/apigateway/erp-dev-api"
+  retention_in_days = 7
+
+  tags = {
+    Name = "erp-dev-api-logs"
+  }
+}
+
+# Outputs
+output "api_gateway_url" {
+  value       = aws_apigatewayv2_stage.dev.invoke_url
+  description = "API Gateway Invoke URL"
+}
+
+output "nlb_dns" {
+  value       = aws_lb.nlb.dns_name
+  description = "NLB DNS Name"
+}
+
+output "vpc_link_id" {
+  value       = aws_apigatewayv2_vpc_link.main.id
+  description = "VPC Link ID"
+}
+
+output "target_group_arns" {
+  value = {
+    employee            = aws_lb_target_group.employee.arn
+    approval_request    = aws_lb_target_group.approval_request.arn
+    approval_processing = aws_lb_target_group.approval_processing.arn
+    notification        = aws_lb_target_group.notification.arn
+  }
+  description = "NLB Target Group ARNs"
+}
+
