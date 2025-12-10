@@ -1,14 +1,21 @@
-# Kubernetes Manifests
+# ERP Kubernetes Manifests
 
-EKS에 배포되는 Kubernetes 리소스 정의 파일들입니다.
+**Orchestration**: Kubernetes 1.31  
+**Cluster**: Amazon EKS  
+**Namespace**: erp-dev  
+**최종 업데이트**: 2025-12-10
 
-## 구조
+---
+
+## 📋 Manifest 구성
+
+### 디렉토리 구조
 
 ```
 manifests/
 ├── base/                           # 공통 리소스
-│   ├── namespace.yaml              # erp-dev 네임스페이스
-│   └── configmap.yaml              # 환경 변수
+│   ├── namespace.yaml              # erp-dev Namespace
+│   └── configmap.yaml              # 공통 ConfigMap
 ├── employee/                       # Employee Service
 │   ├── deployment.yaml
 │   ├── service.yaml
@@ -31,113 +38,274 @@ manifests/
     └── targetgroupbinding.yaml
 ```
 
-## 배포
+---
+
+## 🚀 배포
+
+### 1. Namespace 및 공통 리소스
 
 ```bash
-# Namespace 생성
 kubectl apply -f base/namespace.yaml
-
-# ConfigMap 생성
 kubectl apply -f base/configmap.yaml
+```
 
-# Secret 생성 (수동)
-kubectl create secret generic erp-secrets \
-  --from-literal=mysql-url="jdbc:mysql://RDS_ENDPOINT:3306/erp_db" \
-  --from-literal=mysql-password=PASSWORD \
-  --from-literal=mongodb-uri=MONGODB_URI \
-  -n erp-dev
+### 2. 서비스 배포
 
-# 서비스 배포
+```bash
+# Employee Service
 kubectl apply -f employee/
-kubectl apply -f approval-request/
-kubectl apply -f approval-processing/
-kubectl apply -f notification/
 
-# 확인
+# Approval Request Service
+kubectl apply -f approval-request/
+
+# Approval Processing Service
+kubectl apply -f approval-processing/
+
+# Notification Service
+kubectl apply -f notification/
+```
+
+### 3. 배포 확인
+
+```bash
+# Pod 상태
 kubectl get pods -n erp-dev
+
+# Service 상태
 kubectl get svc -n erp-dev
+
+# HPA 상태
+kubectl get hpa -n erp-dev
+
+# TargetGroupBinding 상태
 kubectl get targetgroupbinding -n erp-dev
 ```
 
-## 주요 리소스
+---
+
+## 📊 리소스 설정
 
 ### Deployment
-- Replicas: 2
-- Image: ECR (806332783810.dkr.ecr.ap-northeast-2.amazonaws.com)
-- Resources:
-  - Requests: CPU 250m, Memory 512Mi
-  - Limits: CPU 500m, Memory 1Gi
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: employee-service
+  namespace: erp-dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: employee-service
+  template:
+    metadata:
+      labels:
+        app: employee-service
+    spec:
+      containers:
+      - name: employee-service
+        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service:latest
+        ports:
+        - containerPort: 8081
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /employees
+            port: 8081
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /employees
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 5
+```
 
 ### Service
-- Type: ClusterIP
-- Ports: 8081-8084
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: employee-service
+  namespace: erp-dev
+spec:
+  selector:
+    app: employee-service
+  ports:
+  - port: 8081
+    targetPort: 8081
+  type: ClusterIP
+```
 
 ### HPA (Horizontal Pod Autoscaler)
-- Min Replicas: 2
-- Max Replicas: 5
-- Target CPU: 70%
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: employee-service-hpa
+  namespace: erp-dev
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: employee-service
+  minReplicas: 2
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
 
 ### TargetGroupBinding
-- AWS Load Balancer Controller가 자동으로 NLB Target Group에 Pod IP 등록
-- Health Check: /actuator/health
 
-## 환경 변수
-
-**ConfigMap (erp-config)**:
 ```yaml
-SPRING_PROFILES_ACTIVE: prod
-GRPC_SERVER_PORT: 9090
-NOTIFICATION_SERVICE_URL: http://notification-service:8084
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: employee-service-tgb
+  namespace: erp-dev
+spec:
+  serviceRef:
+    name: employee-service
+    port: 8081
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-tg/xxx
+  targetType: ip
 ```
 
-**Secret (erp-secrets)**:
+---
+
+## 🔧 환경 변수
+
+### ConfigMap
+
 ```yaml
-mysql-url: jdbc:mysql://RDS_ENDPOINT:3306/erp_db
-mysql-password: PASSWORD
-mongodb-uri: mongodb+srv://...
-redis-host: REDIS_ENDPOINT
-redis-port: 6379
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erp-config
+  namespace: erp-dev
+data:
+  MONGODB_URI: "mongodb+srv://erp_user:***@erp-dev-cluster.4fboxqw.mongodb.net/erp"
+  EMPLOYEE_SERVICE_URL: "http://employee-service:8081"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:8084"
+  REDIS_HOST: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
+  REDIS_PORT: "6379"
+  GRPC_APPROVAL_PROCESSING_ADDRESS: "static://approval-processing-service:9090"
+  GRPC_APPROVAL_REQUEST_ADDRESS: "static://approval-request-service:9091"
 ```
 
-## CI/CD
+### Secret
 
-CodePipeline이 Git Push를 감지하면:
-1. CodeBuild가 Docker 이미지 빌드
-2. ECR에 이미지 푸시
-3. Kubernetes가 Rolling Update 수행
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: erp-secret
+  namespace: erp-dev
+type: Opaque
+data:
+  MYSQL_USERNAME: YWRtaW4=  # base64 encoded
+  MYSQL_PASSWORD: ZXJwMTIzNDUh  # base64 encoded
+```
 
-## 롤백
+---
+
+## 📊 모니터링
+
+### Pod 로그
 
 ```bash
-# 이전 버전으로 롤백
-kubectl rollout undo deployment/employee-service -n erp-dev
+# 실시간 로그
+kubectl logs -n erp-dev -l app=employee-service -f
 
-# 특정 버전으로 롤백
-kubectl rollout undo deployment/employee-service --to-revision=2 -n erp-dev
+# 최근 50줄
+kubectl logs -n erp-dev -l app=employee-service --tail=50
 
-# 롤아웃 히스토리 확인
-kubectl rollout history deployment/employee-service -n erp-dev
+# 특정 Pod
+kubectl logs -n erp-dev <pod-name>
 ```
 
-## 로그 확인
+### Pod 상태
 
 ```bash
-# Pod 로그
-kubectl logs -f deployment/employee-service -n erp-dev
+# 전체 Pod
+kubectl get pods -n erp-dev -o wide
 
-# 최근 100줄
-kubectl logs --tail=100 deployment/employee-service -n erp-dev
-
-# 특정 Pod 로그
-kubectl logs employee-service-bb8786ffb-62bb8 -n erp-dev
+# 특정 Pod 상세
+kubectl describe pod -n erp-dev <pod-name>
 ```
 
-## 스케일링
+### 리소스 사용량
 
 ```bash
-# 수동 스케일링
-kubectl scale deployment/employee-service --replicas=3 -n erp-dev
+# CPU/Memory 사용량
+kubectl top pods -n erp-dev
 
-# HPA 확인
-kubectl get hpa -n erp-dev
+# Node 사용량
+kubectl top nodes
 ```
+
+---
+
+## 🐛 트러블슈팅
+
+### Pod CrashLoopBackOff
+
+```bash
+# 로그 확인
+kubectl logs -n erp-dev <pod-name> --previous
+
+# 이벤트 확인
+kubectl describe pod -n erp-dev <pod-name>
+
+# 환경 변수 확인
+kubectl exec -n erp-dev <pod-name> -- env
+```
+
+### Service 연결 실패
+
+```bash
+# Service 엔드포인트 확인
+kubectl get endpoints -n erp-dev
+
+# Service DNS 테스트
+kubectl run test-pod --rm -i --restart=Never --image=busybox -n erp-dev -- nslookup employee-service
+```
+
+### HPA 작동 안 함
+
+```bash
+# metrics-server 설치
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# HPA 상태 확인
+kubectl describe hpa -n erp-dev employee-service-hpa
+```
+
+---
+
+## 📚 참고 자료
+
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)
+- [Kubernetes Best Practices](https://kubernetes.io/docs/concepts/configuration/overview/)
+
+---
+
+## 📄 라이선스
+
+MIT License
