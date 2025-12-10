@@ -23,13 +23,20 @@ function AllApprovals({ refresh }) {
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (approval) => {
+    // finalStatus 우선, 없으면 steps의 status 확인
+    const status = approval.finalStatus || approval.status;
+    
     const statusMap = {
-      PENDING: '⏳ 대기',
-      APPROVED: '✓ 승인',
-      REJECTED: '✗ 반려',
+      'in_progress': '⏳ 결재 대기',
+      'pending': '⏳ 결재 대기',
+      'approved': '✓ 승인 완료',
+      'rejected': '✗ 반려',
+      'PENDING': '⏳ 결재 대기',
+      'APPROVED': '✓ 승인 완료',
+      'REJECTED': '✗ 반려',
     };
-    return statusMap[status] || status;
+    return statusMap[status] || status || '⏳ 결재 대기';
   };
 
   if (loading) return <div className="all-approvals"><p>로딩 중...</p></div>;
@@ -68,8 +75,8 @@ function AllApprovals({ refresh }) {
                     : '-'}
                 </td>
                 <td>
-                  <span className={`status ${approval.status?.toLowerCase()}`}>
-                    {getStatusText(approval.status)}
+                  <span className={`status ${(approval.finalStatus || approval.status || 'pending').toLowerCase()}`}>
+                    {getStatusText(approval)}
                   </span>
                 </td>
               </tr>

@@ -179,6 +179,13 @@ public class ApprovalRequestService {
                 .orElseThrow(() -> new ApprovalNotFoundException(requestId));
     }
     
+    public List<ApprovalRequest> getPendingApprovalsByApproverId(Integer approverId) {
+        return repository.findAll().stream()
+                .filter(approval -> approval.getSteps().stream()
+                        .anyMatch(step -> step.getApproverId().equals(approverId) && "pending".equals(step.getStatus())))
+                .collect(Collectors.toList());
+    }
+    
     public void deleteAll() {
         repository.deleteAll();
     }

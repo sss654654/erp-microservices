@@ -131,6 +131,10 @@ function QuestList({ user }) {
                 >
                   <h3>{quest.title}</h3>
                   <p>{quest.description}</p>
+                  <div className="quest-meta">
+                    <span className="creator">생성자: {quest.createdByName || `ID ${quest.createdBy}`}</span>
+                    <span className="department">{quest.department}</span>
+                  </div>
                   <div className="quest-footer">
                     <span className="reward">🎁 연차 {quest.rewardDays}일</span>
                     <button onClick={() => handleAccept(quest.id)}>수락하기</button>

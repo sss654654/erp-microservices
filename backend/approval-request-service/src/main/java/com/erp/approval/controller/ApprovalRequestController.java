@@ -35,6 +35,11 @@ public class ApprovalRequestController {
         return ResponseEntity.ok(service.getApprovalById(requestId));
     }
     
+    @GetMapping("/pending/{approverId}")
+    public ResponseEntity<List<ApprovalRequest>> getPendingApprovals(@PathVariable Integer approverId) {
+        return ResponseEntity.ok(service.getPendingApprovalsByApproverId(approverId));
+    }
+    
     @PutMapping("/{requestId}/approve")
     public ResponseEntity<?> approveRequest(@PathVariable Integer requestId, @RequestBody Map<String, Integer> body) {
         Integer approverId = body.get("approverId");

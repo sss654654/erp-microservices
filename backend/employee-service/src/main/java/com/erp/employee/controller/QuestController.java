@@ -33,6 +33,8 @@ public class QuestController {
             .filter(q -> !"DELETED".equals(q.getStatus()))
             .map(q -> {
                 List<QuestProgress> progresses = progressRepository.findByQuestId(q.getId());
+                String createdByName = employeeRepository.findById(q.getCreatedBy())
+                    .map(Employee::getName).orElse("Unknown");
                 
                 return Map.of(
                     "id", q.getId(),
@@ -41,6 +43,7 @@ public class QuestController {
                     "rewardDays", q.getRewardDays(),
                     "department", q.getDepartment(),
                     "createdBy", q.getCreatedBy(),
+                    "createdByName", createdByName,
                     "status", q.getStatus(),
                     "progressList", progresses.stream().map(p -> Map.of(
                         "id", p.getId(),

@@ -14,11 +14,25 @@ function EmployeeManagement({ user }) {
   const fetchEmployees = async () => {
     try {
       const res = await axios.get(API_ENDPOINTS.EMPLOYEE);
-      // 자기 부서만 필터링
-      const filtered = res.data.filter(emp => emp.department === user.department);
+      // 이메일이 있고, 자기 부서인 직원만 필터링 (중복 제거)
+      const filtered = res.data
+        .filter(emp => emp.email && emp.department === user.department)
+        .reduce((acc, emp) => {
+          // 이메일 기준으로 중복 제거 (최신 것만 유지)
+          const existing = acc.find(e => e.email === emp.email);
+          if (!existing) {
+            acc.push(emp);
+          } else if (emp.id > existing.id) {
+            // 더 최신 ID면 교체
+            const index = acc.indexOf(existing);
+            acc[index] = emp;
+          }
+          return acc;
+        }, []);
       setEmployees(filtered);
     } catch (err) {
       console.error('직원 목록 조회 실패:', err);
+      setEmployees([]);
     } finally {
       setLoading(false);
     }
