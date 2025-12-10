@@ -7,272 +7,200 @@
 
 ---
 
-## 📋 인프라 구성
+## Terraform 모듈 구조
 
-### AWS 리소스
+### 설계 철학
 
-| 리소스 | 서비스 | 용도 |
-|--------|--------|------|
-| **VPC** | AWS VPC | 네트워크 격리 |
-| **Subnet** | Public × 2, Private × 2 | Multi-AZ 배포 |
-| **NAT Gateway** | 1개 | Private Subnet 인터넷 접근 |
-| **Security Group** | 4개 | 서비스별 방화벽 |
-| **EKS** | Kubernetes 1.31 | 컨테이너 오케스트레이션 |
-| **RDS** | MySQL 8.0 | 직원 정보 DB |
-| **ElastiCache** | Redis 7.0 | 캐시 및 알림 |
-| **MongoDB** | Atlas M0 | 결재 요청 DB |
-| **NLB** | Network Load Balancer | Layer 4 로드밸런싱 |
-| **API Gateway** | HTTP API | 단일 진입점 |
-| **S3** | Static Website | 프론트엔드 호스팅 |
-| **CloudFront** | CDN | 전 세계 배포 |
-| **ECR** | Container Registry | Docker 이미지 저장 |
-| **CodePipeline** | CI/CD | 자동 배포 |
+**세분화 vs 통합 전략**
 
----
+폴더는 세분화하고 각 tfstate 파일을 따로 저장하는 것이 나중에 콘솔에서 작업했을 때도 형상 맞춰주기 좋습니다.
 
-## 🏗️ Terraform 모듈 구조
+급하게 콘솔로 RDS 파라미터 변경 시 → 해당 경로의 tfstate 파일은 RDS 파라미터 정보만 가지고 있기에 찾아보기 쉽고, 다른 리소스에 영향 없이 수정 가능합니다.
+
+### 모듈 구조
 
 ```
 infrastructure/terraform/dev/
-├── erp-dev-VPC/                    # VPC, Subnet, Route Table
-│   ├── vpc/
-│   ├── subnet/
-│   └── route-table/
-├── erp-dev-SecurityGroups/         # Security Groups
+├── erp-dev-VPC/                    # 세분화 (각각 독립 apply)
+│   ├── vpc/                        # terraform apply 1
+│   ├── subnet/                     # terraform apply 2
+│   └── route-table/                # terraform apply 3
+├── erp-dev-SecurityGroups/         # 세분화 (각각 독립 apply)
 │   ├── eks-sg/
 │   ├── rds-sg/
 │   ├── elasticache-sg/
 │   └── alb-sg/
-├── erp-dev-IAM/                    # IAM Roles
+├── erp-dev-Databases/              # 세분화 (각각 독립 apply)
+│   ├── rds/
+│   └── elasticache/
+├── erp-dev-IAM/                    # 통합 (main.tf로 한 번에 apply)
+│   ├── main.tf                     # 모듈 호출
 │   ├── eks-cluster-role/
 │   ├── eks-node-role/
 │   ├── codebuild-role/
 │   └── codepipeline-role/
-├── erp-dev-Databases/              # RDS, ElastiCache
-│   ├── rds/
-│   └── elasticache/
-├── erp-dev-Secrets/                # Secrets Manager
-├── erp-dev-EKS/                    # EKS Cluster
-├── erp-dev-LoadBalancerController/ # AWS Load Balancer Controller
-├── erp-dev-APIGateway/             # API Gateway, NLB
+├── erp-dev-EKS/                    # 통합 (main.tf로 한 번에 apply)
+├── erp-dev-APIGateway/             # 통합 (main.tf로 한 번에 apply)
 │   ├── nlb/
 │   ├── target-groups/
 │   ├── vpc-link/
 │   └── api-gateway/
-└── erp-dev-Frontend/               # S3, CloudFront
-    ├── s3/
-    └── cloudfront/
+├── erp-dev-Frontend/               # 통합 (main.tf로 한 번에 apply)
+│   ├── s3/
+│   └── cloudfront/
+├── erp-dev-LoadBalancerController/ # 단일 리소스
+└── erp-dev-Secrets/                # 단일 리소스
 ```
 
 ---
 
-## 🚀 배포 순서
+## 세분화 전략 (erp-dev-SecurityGroups 예시)
 
-### 1. VPC 구성
+**왜 세분화했는가?**
 
+1. **독립적인 생명주기**: RDS SG 규칙 변경 시 EKS SG 영향 없음
+2. **콘솔 작업 후 형상 관리 용이**: 급하게 콘솔에서 3307 포트 추가 → 해당 폴더만 terraform plan으로 확인
+3. **State Lock 충돌 방지**: 4개 폴더 = 4개 독립 tfstate → 팀원 A가 RDS SG 수정 중, 팀원 B는 EKS SG 수정 가능
+4. **빠른 Plan/Apply**: 전체 SG 한 번에 약 2분 → 개별 SG 약 20초 (10배 빠름)
+
+**실행 방법**
 ```bash
-cd infrastructure/terraform/dev/erp-dev-VPC
-
-# VPC
-cd vpc
-terraform init
-terraform apply -auto-approve
-
-# Subnet
-cd ../subnet
-terraform init
-terraform apply -auto-approve
-
-# Route Table
-cd ../route-table
-terraform init
-terraform apply -auto-approve
-```
-
-### 2. Security Groups
-
-```bash
-cd ../../erp-dev-SecurityGroups
-
+cd erp-dev-SecurityGroups
 cd eks-sg && terraform init && terraform apply -auto-approve
 cd ../rds-sg && terraform init && terraform apply -auto-approve
 cd ../elasticache-sg && terraform init && terraform apply -auto-approve
 cd ../alb-sg && terraform init && terraform apply -auto-approve
 ```
 
-### 3. IAM Roles
+**장점**: 변경 영향 범위 최소화, 콘솔 작업 후 형상 관리 쉬움, 팀 협업 용이, 빠른 피드백  
+**단점**: 초기 구축 시 4번 실행 필요, 의존성 관리 필요
 
+---
+
+## 통합 전략 (erp-dev-IAM 예시)
+
+**왜 통합했는가?**
+
+1. **강한 의존성**: EKS Cluster Role과 Node Role은 함께 생성되어야 함
+2. **상호 참조**: CodeBuild Role과 CodePipeline Role은 서로 참조
+3. **공유 Policy**: IAM Policy는 여러 Role에서 공유
+4. **원자성**: 모든 Role이 함께 생성되거나 함께 실패해야 함
+
+**실행 방법**
 ```bash
-cd ../../erp-dev-IAM
+cd erp-dev-IAM
 terraform init
 terraform apply -auto-approve
 ```
 
-### 4. Databases
+**장점**: 의존성 관리 자동, 원자성 보장, 간단한 실행  
+**단점**: 한 Role 변경 시 전체 Plan 필요
+
+---
+
+## 배포 순서
 
 ```bash
-cd ../erp-dev-Databases
+cd infrastructure/terraform/dev
 
-cd rds && terraform init && terraform apply -auto-approve
+# 1. VPC (세분화)
+cd erp-dev-VPC/vpc && terraform init && terraform apply -auto-approve
+cd ../subnet && terraform init && terraform apply -auto-approve
+cd ../route-table && terraform init && terraform apply -auto-approve
+
+# 2. Security Groups (세분화)
+cd ../../erp-dev-SecurityGroups
+cd eks-sg && terraform init && terraform apply -auto-approve
+cd ../rds-sg && terraform init && terraform apply -auto-approve
+cd ../elasticache-sg && terraform init && terraform apply -auto-approve
+cd ../alb-sg && terraform init && terraform apply -auto-approve
+
+# 3. IAM (통합)
+cd ../../erp-dev-IAM && terraform init && terraform apply -auto-approve
+
+# 4. Databases (세분화)
+cd ../erp-dev-Databases/rds && terraform init && terraform apply -auto-approve
 cd ../elasticache && terraform init && terraform apply -auto-approve
-```
 
-### 5. Secrets
+# 5. Secrets (단일)
+cd ../../erp-dev-Secrets && terraform init && terraform apply -auto-approve
 
-```bash
-cd ../../erp-dev-Secrets
-terraform init
-terraform apply -auto-approve
-```
+# 6. EKS (통합)
+cd ../erp-dev-EKS && terraform init && terraform apply -auto-approve
 
-### 6. EKS Cluster
+# 7. Load Balancer Controller (단일)
+cd ../erp-dev-LoadBalancerController && terraform init && terraform apply -auto-approve
 
-```bash
-cd ../erp-dev-EKS
-terraform init
-terraform apply -auto-approve
+# 8. API Gateway (통합)
+cd ../erp-dev-APIGateway && terraform init && terraform apply -auto-approve
 
-# kubeconfig 설정
-aws eks update-kubeconfig --name erp-dev --region ap-northeast-2
-```
-
-### 7. Load Balancer Controller
-
-```bash
-cd ../erp-dev-LoadBalancerController
-terraform init
-terraform apply -auto-approve
-```
-
-### 8. API Gateway
-
-```bash
-cd ../erp-dev-APIGateway
-terraform init
-terraform apply -auto-approve
-```
-
-### 9. Frontend
-
-```bash
-cd ../erp-dev-Frontend
-terraform init
-terraform apply -auto-approve
+# 9. Frontend (통합)
+cd ../erp-dev-Frontend && terraform init && terraform apply -auto-approve
 ```
 
 ---
 
-## 🔧 주요 설정
+## AWS 리소스
 
-### VPC CIDR
+**네트워크**: VPC, Subnet (Public × 2, Private × 2), NAT Gateway, Security Group × 4  
+**컴퓨팅**: EKS 1.31, Worker Nodes (t3.small × 2~3)  
+**데이터베이스**: RDS MySQL 8.0, ElastiCache Redis 7.0, MongoDB Atlas M0  
+**로드밸런서**: NLB (Private), API Gateway (HTTP)  
+**스토리지**: S3, ECR  
+**CDN**: CloudFront  
+**CI/CD**: CodePipeline × 4, CodeBuild × 4
 
+---
+
+## 주요 설정
+
+**VPC CIDR**
 ```
 VPC: 10.0.0.0/16
-Public Subnet 1: 10.0.1.0/24 (ap-northeast-2a)
-Public Subnet 2: 10.0.2.0/24 (ap-northeast-2c)
-Private Subnet 1: 10.0.10.0/24 (ap-northeast-2a)
-Private Subnet 2: 10.0.11.0/24 (ap-northeast-2c)
+Public Subnet: 10.0.1.0/24, 10.0.2.0/24
+Private Subnet: 10.0.10.0/24, 10.0.11.0/24
 ```
 
-### EKS 설정
-
-```hcl
-cluster_name    = "erp-dev"
-cluster_version = "1.31"
-node_group_name = "erp-dev-nodes"
-instance_types  = ["t3.small"]
-desired_size    = 2
-min_size        = 1
-max_size        = 3
+**EKS**
+```
+Cluster: erp-dev
+Version: 1.31
+Node Type: t3.small
+Desired: 2, Min: 1, Max: 3
 ```
 
-### RDS 설정
-
-```hcl
-engine               = "mysql"
-engine_version       = "8.0"
-instance_class       = "db.t3.micro"
-allocated_storage    = 20
-database_name        = "erp"
-username             = "admin"
-multi_az             = false
-publicly_accessible  = false
+**RDS**
+```
+Engine: MySQL 8.0
+Instance: db.t3.micro
+Storage: 20GB
+Multi-AZ: false
 ```
 
 ---
 
-## 💰 비용 분석
+## 비용
 
-| 리소스 | 월 비용 |
-|--------|---------|
-| EKS Control Plane | $73.00 |
-| Worker Nodes (t3.small × 2) | $30.00 |
-| RDS (db.t3.micro) | $15.00 |
-| ElastiCache (cache.t3.micro) | $12.00 |
-| NAT Gateway | $32.00 |
-| NLB | $16.00 |
-| API Gateway | $3.50 |
-| CloudFront | $1.00 |
-| S3 | $0.50 |
-| ECR | $1.00 |
-| CodePipeline | $4.00 |
-| CodeBuild | $2.00 |
-| 기타 | $1.00 |
-| **합계** | **$191.00** |
+**월 예상 비용**: $191
+
+EKS $73, Worker Nodes $30, RDS $15, ElastiCache $12, NAT Gateway $32, NLB $16, 기타 $13
 
 ---
 
-## 🐛 트러블슈팅
+## 트러블슈팅
 
-### Terraform State Lock
-
-**문제**: `Error acquiring the state lock`
-
-**해결**:
+**Terraform State Lock**
 ```bash
-# DynamoDB Lock 테이블 확인
-aws dynamodb scan --table-name terraform-lock --region ap-northeast-2
-
-# 강제 unlock (주의!)
 terraform force-unlock <lock-id>
 ```
 
-### EKS 노드 생성 실패
-
-**문제**: `Nodes not joining cluster`
-
-**해결**:
+**EKS 노드 생성 실패**
 ```bash
-# IAM Role 확인
 aws iam get-role --role-name erp-dev-eks-node-role
-
-# Security Group 확인
-aws ec2 describe-security-groups --group-ids <sg-id>
-```
-
-### RDS 연결 실패
-
-**문제**: `Could not connect to RDS`
-
-**해결**:
-```bash
-# RDS 엔드포인트 확인
-terraform output -state=erp-dev-Databases/rds/terraform.tfstate
-
-# Security Group Ingress 규칙 확인
-aws ec2 describe-security-groups --group-ids <rds-sg-id>
 ```
 
 ---
 
-## 📚 참고 자료
-
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [AWS EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
-- [Terraform Best Practices](https://www.terraform-best-practices.com/)
-
----
-
-## 📄 라이선스
+## 라이선스
 
 MIT License
