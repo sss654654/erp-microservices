@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: notification-service
-  namespace: default
+  name: approval-processing-service
+  namespace: erp-dev
   labels:
-    app: notification-service
+    app: approval-processing-service
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: notification-service
+      app: approval-processing-service
   template:
     metadata:
       labels:
-        app: notification-service
+        app: approval-processing-service
     spec:
       affinity:
         podAntiAffinity:
@@ -25,11 +25,11 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - notification-service
+                  - approval-processing-service
               topologyKey: topology.kubernetes.io/zone
       containers:
-      - name: notification-service
-        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/notification-service:latest
+      - name: approval-processing-service
+        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-processing-service:latest
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
@@ -37,19 +37,16 @@ spec:
           capabilities:
             drop: [ALL]
         ports:
-        - containerPort: 8084
+        - containerPort: 8083
           name: http
+        - containerPort: 9090
+          name: grpc
         env:
-        - name: REDIS_HOST
+        - name: GRPC_CLIENT_APPROVALREQUESTSERVICE_ADDRESS
           valueFrom:
             configMapKeyRef:
               name: erp-config
-              key: REDIS_HOST
-        - name: REDIS_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: erp-config
-              key: REDIS_PORT
+              key: GRPC_APPROVAL_REQUEST_ADDRESS
         resources:
           requests:
             cpu: 150m
@@ -59,13 +56,13 @@ spec:
             memory: 300Mi
         livenessProbe:
           httpGet:
-            path: /notifications/health
-            port: 8084
+            path: /process/1
+            port: 8083
           initialDelaySeconds: 60
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /notifications/health
-            port: 8084
+            path: /process/1
+            port: 8083
           initialDelaySeconds: 30
           periodSeconds: 5

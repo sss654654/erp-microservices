@@ -1,0 +1,43 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: employee-service-tgb
+  namespace: erp-dev
+spec:
+  serviceRef:
+    name: employee-service
+    port: 8081
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/fbc2202e0ce36323
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: approval-request-service-tgb
+  namespace: erp-dev
+spec:
+  serviceRef:
+    name: approval-request-service
+    port: 8082
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/8c464cb6e6f397e8
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: approval-processing-service-tgb
+  namespace: erp-dev
+spec:
+  serviceRef:
+    name: approval-processing-service
+    port: 8083
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/da60a92bb21c56b1
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: notification-service-tgb
+  namespace: erp-dev
+spec:
+  serviceRef:
+    name: notification-service
+    port: 8084
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/25d73a1f55aaeaff

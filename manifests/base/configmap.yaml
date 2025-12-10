@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: erp-config
-  namespace: default
+  namespace: erp-dev
 data:
   # MySQL (Employee Service)
   MYSQL_HOST: "erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com"

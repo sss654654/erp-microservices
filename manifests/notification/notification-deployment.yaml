@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: approval-processing-service
-  namespace: default
+  name: notification-service
+  namespace: erp-dev
   labels:
-    app: approval-processing-service
+    app: notification-service
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: approval-processing-service
+      app: notification-service
   template:
     metadata:
       labels:
-        app: approval-processing-service
+        app: notification-service
     spec:
       affinity:
         podAntiAffinity:
@@ -25,11 +25,11 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - approval-processing-service
+                  - notification-service
               topologyKey: topology.kubernetes.io/zone
       containers:
-      - name: approval-processing-service
-        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-processing-service:latest
+      - name: notification-service
+        image: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/notification-service:latest
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
@@ -37,16 +37,19 @@ spec:
           capabilities:
             drop: [ALL]
         ports:
-        - containerPort: 8083
+        - containerPort: 8084
           name: http
-        - containerPort: 9090
-          name: grpc
         env:
-        - name: GRPC_CLIENT_APPROVALREQUESTSERVICE_ADDRESS
+        - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
               name: erp-config
-              key: GRPC_APPROVAL_REQUEST_ADDRESS
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: REDIS_PORT
         resources:
           requests:
             cpu: 150m
@@ -54,15 +57,3 @@ spec:
           limits:
             cpu: 400m
             memory: 300Mi
-        livenessProbe:
-          httpGet:
-            path: /process/1
-            port: 8083
-          initialDelaySeconds: 60
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /process/1
-            port: 8083
-          initialDelaySeconds: 30
-          periodSeconds: 5

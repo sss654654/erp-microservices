@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: employee-service
-  namespace: default
+  namespace: erp-dev
   labels:
     app: employee-service
 spec:

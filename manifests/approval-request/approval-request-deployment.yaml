@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: approval-request-service
-  namespace: default
+  namespace: erp-dev
   labels:
     app: approval-request-service
 spec:
