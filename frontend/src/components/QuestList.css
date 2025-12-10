@@ -1,0 +1,104 @@
+.quest-container {
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+}
+
+.quest-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.quest-tabs button {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  font-size: 1.1em;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 3px solid transparent;
+}
+
+.quest-tabs button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  font-weight: bold;
+}
+
+.quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.quest-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.quest-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.quest-card h3 {
+  margin: 0 0 10px 0;
+  color: #2c3e50;
+}
+
+.quest-card p {
+  color: #555;
+  margin-bottom: 15px;
+}
+
+.quest-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quest-footer .reward {
+  font-weight: bold;
+  color: #f39c12;
+  font-size: 1.1em;
+}
+
+.quest-footer button {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.quest-footer button:hover {
+  transform: translateY(-2px);
+}
+
+.quest-footer .claim-btn {
+  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+}
+
+.status-badge {
+  padding: 5px 15px;
+  border-radius: 20px;
+  color: white;
+  font-size: 0.9em;
+  font-weight: bold;
+}
+
+.quest-list .empty {
+  text-align: center;
+  color: #95a5a6;
+  padding: 40px;
+  font-size: 1.1em;
+}

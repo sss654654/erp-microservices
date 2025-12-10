@@ -10,9 +10,12 @@
   },
   "dependencies": {
     "@stomp/stompjs": "^7.2.1",
+    "amazon-cognito-identity-js": "^6.3.7",
     "axios": "^1.6.0",
+    "framer-motion": "^10.16.16",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
     "sockjs-client": "^1.6.1"
   },
   "devDependencies": {

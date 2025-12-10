@@ -1,0 +1,75 @@
+.attendance-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.attendance-card h2 {
+  margin-bottom: 20px;
+  font-size: 1.8em;
+}
+
+.progress-container {
+  margin-bottom: 20px;
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.progress-text .count {
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
+.progress-text .reward {
+  font-size: 0.9em;
+  opacity: 0.9;
+}
+
+.progress-bar {
+  height: 30px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd700, #ffed4e);
+  border-radius: 15px;
+  transition: width 0.5s ease;
+}
+
+.check-in-btn {
+  width: 100%;
+  padding: 15px;
+  background: white;
+  color: #667eea;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.check-in-btn:hover {
+  transform: translateY(-3px);
+}
+
+.check-in-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.attendance-card .info {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 0.9em;
+  opacity: 0.9;
+}

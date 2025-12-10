@@ -1,0 +1,177 @@
+.manager-quests {
+  background: white;
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+}
+
+.manager-quests .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.manager-quests .create-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: transform 0.2s;
+}
+
+.manager-quests .create-btn:hover {
+  transform: translateY(-2px);
+}
+
+.quest-form {
+  background: #f5f7fa;
+  padding: 20px;
+  border-radius: 15px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.quest-form input,
+.quest-form textarea {
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1em;
+}
+
+.quest-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.reward-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reward-input input {
+  width: 100px;
+}
+
+.quest-form button[type='submit'] {
+  padding: 12px;
+  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.manager-quest-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 20px;
+  border-radius: 15px;
+  margin-bottom: 15px;
+}
+
+.manager-quest-card h3 {
+  margin: 0 0 10px 0;
+  color: #2c3e50;
+}
+
+.manager-quest-card p {
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.manager-quest-card .reward {
+  display: inline-block;
+  padding: 5px 15px;
+  background: #f39c12;
+  color: white;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+.progress-list {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.progress-list h4 {
+  margin-bottom: 10px;
+  color: #2c3e50;
+}
+
+.progress-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.progress-item .status {
+  padding: 5px 15px;
+  border-radius: 20px;
+  color: white;
+  font-size: 0.9em;
+  font-weight: bold;
+}
+
+.progress-item .status.waiting_approval {
+  background: #f39c12;
+}
+
+.progress-item .status.approved {
+  background: #2ecc71;
+}
+
+.progress-item .status.in_progress {
+  background: #3498db;
+}
+
+.progress-item .actions {
+  display: flex;
+  gap: 10px;
+}
+
+.progress-item .actions button {
+  padding: 5px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  color: white;
+}
+
+.progress-item .actions .approve {
+  background: #2ecc71;
+}
+
+.progress-item .actions .reject {
+  background: #e74c3c;
+}
+
+.manager-quest-card .delete-btn {
+  margin-top: 15px;
+  padding: 8px 20px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.manager-quests .empty {
+  text-align: center;
+  color: #95a5a6;
+  padding: 40px;
+  font-size: 1.1em;
+}
