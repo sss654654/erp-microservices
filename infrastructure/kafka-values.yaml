@@ -1,0 +1,27 @@
+# 최소 설정 - 빠른 설치
+replicaCount: 1
+
+controller:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+persistence:
+  enabled: false
+
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+autoCreateTopicsEnable: true
+logRetentionHours: 24
