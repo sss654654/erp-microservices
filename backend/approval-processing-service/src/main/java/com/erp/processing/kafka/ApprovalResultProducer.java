@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ApprovalResultProducer {
     
-    private final KafkaTemplate<String, ApprovalResultMessage> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     
     @Value("${kafka.topics.approval-results:approval-results}")
     private String topic;
