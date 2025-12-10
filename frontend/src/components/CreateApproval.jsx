@@ -29,7 +29,17 @@ function CreateApproval({ onSuccess, user }) {
     try {
       const res = await axios.get(API_ENDPOINTS.EMPLOYEE);
       const managerList = res.data.filter(emp => emp.position === 'MANAGER');
-      setManagers(managerList);
+      
+      // 이름+부서 기준 중복 제거 (최신 ID 우선)
+      const uniqueManagers = managerList.reduce((acc, manager) => {
+        const key = `${manager.name}_${manager.department}`;
+        if (!acc[key] || acc[key].id < manager.id) {
+          acc[key] = manager;
+        }
+        return acc;
+      }, {});
+      
+      setManagers(Object.values(uniqueManagers));
     } catch (err) {
       console.error('부장 목록 조회 실패:', err);
     }

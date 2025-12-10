@@ -12,6 +12,32 @@
   font-weight: 600;
 }
 
+.approval-queue .queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.approval-queue .queue-header h2 {
+  margin: 0;
+}
+
+.approval-queue .refresh-btn {
+  padding: 8px 16px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.2s;
+}
+
+.approval-queue .refresh-btn:hover {
+  background: #5568d3;
+}
+
 .approval-queue .empty {
   text-align: center;
   color: #999;

@@ -44,10 +44,22 @@ function App() {
     try {
       // 이메일로 기존 직원 조회
       const employees = await axios.get(`${API_ENDPOINTS.EMPLOYEE}`);
-      const existing = employees.data.find(e => e.email === result.user.email);
+      const existing = employees.data.find(e => 
+        e.email === result.user.email || 
+        (e.name === result.user.name && e.position === result.user.position && e.department === result.user.department)
+      );
       
       if (existing) {
         result.user.employeeId = existing.id;
+        // 기존 직원의 email이 null이면 업데이트
+        if (!existing.email) {
+          await axios.put(`${API_ENDPOINTS.EMPLOYEE}/${existing.id}`, {
+            name: existing.name,
+            department: existing.department,
+            position: existing.position,
+            email: result.user.email,
+          });
+        }
       } else {
         // 없으면 생성
         const res = await axios.post(`${API_ENDPOINTS.EMPLOYEE}`, {

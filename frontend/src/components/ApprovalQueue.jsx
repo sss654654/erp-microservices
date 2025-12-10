@@ -57,7 +57,10 @@ function ApprovalQueue({ approverId, refresh }) {
 
   return (
     <div className="approval-queue">
-      <h2>📋 결재 대기 ({queue.length})</h2>
+      <div className="queue-header">
+        <h2>📋 결재 대기 ({queue.length})</h2>
+        <button className="refresh-btn" onClick={fetchQueue}>🔄 새로고침</button>
+      </div>
       {queue.length === 0 ? (
         <p className="empty">대기 중인 결재가 없습니다</p>
       ) : (
@@ -73,10 +76,10 @@ function ApprovalQueue({ approverId, refresh }) {
                 <p className="leave-days">📅 연차 일수: {item.leaveDays}일</p>
               )}
               <div className="actions">
-                <button className="approve" onClick={() => handleApprove(item.id)}>
+                <button className="approve" onClick={() => handleApprove(item.requestId)}>
                   ✓ 승인
                 </button>
-                <button className="reject" onClick={() => handleReject(item.id)}>
+                <button className="reject" onClick={() => handleReject(item.requestId)}>
                   ✗ 반려
                 </button>
               </div>

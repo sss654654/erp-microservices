@@ -43,7 +43,10 @@ function AllApprovals({ refresh }) {
 
   return (
     <div className="all-approvals">
-      <h2>📊 전체 결재 내역</h2>
+      <div className="approvals-header">
+        <h2>📊 전체 결재 내역</h2>
+        <button className="refresh-btn" onClick={fetchApprovals}>🔄 새로고침</button>
+      </div>
       {approvals.length === 0 ? (
         <p className="empty">결재 내역이 없습니다</p>
       ) : (

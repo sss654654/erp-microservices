@@ -10,6 +10,32 @@
   color: #2c3e50;
 }
 
+.all-approvals .approvals-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.all-approvals .approvals-header h2 {
+  margin: 0;
+}
+
+.all-approvals .refresh-btn {
+  padding: 8px 16px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.2s;
+}
+
+.all-approvals .refresh-btn:hover {
+  background: #5568d3;
+}
+
 .all-approvals .empty {
   text-align: center;
   color: #95a5a6;
