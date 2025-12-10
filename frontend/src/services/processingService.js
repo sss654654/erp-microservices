@@ -6,10 +6,7 @@ const approvalProcessingAPI = axios.create({
 });
 
 export const processingService = {
-  // 결재 대기 목록 조회
-  getQueue: (approverId) => approvalProcessingAPI.get(`/process/${approverId}`),
-  
-  // 결재 처리 (승인/반려)
+  getQueue: (approverId) => approvalProcessingAPI.get(`/${approverId}`),
   processApproval: (approverId, requestId, status) => 
-    approvalProcessingAPI.post(`/process/${approverId}/${requestId}`, { status }),
+    approvalProcessingAPI.post(`/${approverId}/${requestId}`, { status }),
 };

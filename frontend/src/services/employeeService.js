@@ -6,9 +6,9 @@ const employeeAPI = axios.create({
 });
 
 export const employeeService = {
-  getEmployees: () => employeeAPI.get('/employees'),
-  createEmployee: (data) => employeeAPI.post('/employees', data),
-  updateEmployee: (id, data) => employeeAPI.put(`/employees/${id}`, data),
-  deleteEmployee: (id) => employeeAPI.delete(`/employees/${id}`),
-  getEmployee: (id) => employeeAPI.get(`/employees/${id}`),
+  getEmployees: (params) => employeeAPI.get('', { params }),
+  createEmployee: (data) => employeeAPI.post('', data),
+  updateEmployee: (id, data) => employeeAPI.put(`/${id}`, data),
+  deleteEmployee: (id) => employeeAPI.delete(`/${id}`),
+  getEmployee: (id) => employeeAPI.get(`/${id}`),
 };
