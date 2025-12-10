@@ -19,7 +19,7 @@ function ManagerQuests({ user }) {
 
   const fetchMyQuests = async () => {
     try {
-      const res = await axios.get(`${API_ENDPOINTS.EMPLOYEE}/quests/my-created?managerId=${user.employeeId}`);
+      const res = await axios.get(`${API_ENDPOINTS.QUEST}/my-created?managerId=${user.employeeId}`);
       setQuests(res.data);
     } catch (err) {
       console.error('퀘스트 조회 실패:', err);
@@ -30,7 +30,7 @@ function ManagerQuests({ user }) {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_ENDPOINTS.EMPLOYEE}/quests`, {
+      await axios.post(`${API_ENDPOINTS.QUEST}`, {
         ...formData,
         department: user.department,
         createdBy: user.employeeId,
@@ -46,7 +46,7 @@ function ManagerQuests({ user }) {
 
   const handleApprove = async (questId) => {
     try {
-      await axios.put(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}/approve`, { managerId: user.employeeId });
+      await axios.put(`${API_ENDPOINTS.QUEST}/${questId}/approve`, { managerId: user.employeeId });
       alert('승인했습니다!');
       fetchMyQuests();
     } catch (err) {
@@ -58,7 +58,7 @@ function ManagerQuests({ user }) {
     const reason = prompt('반려 사유를 입력하세요:');
     if (!reason) return;
     try {
-      await axios.put(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}/reject`, {
+      await axios.put(`${API_ENDPOINTS.QUEST}/${questId}/reject`, {
         managerId: user.employeeId,
         reason,
       });
@@ -72,7 +72,7 @@ function ManagerQuests({ user }) {
   const handleDelete = async (questId) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}`);
+      await axios.delete(`${API_ENDPOINTS.QUEST}/${questId}`);
       alert('삭제했습니다.');
       fetchMyQuests();
     } catch (err) {

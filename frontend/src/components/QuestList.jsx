@@ -16,7 +16,7 @@ function QuestList({ user }) {
 
   const fetchQuests = async () => {
     try {
-      const res = await axios.get(`${API_ENDPOINTS.EMPLOYEE}/quests/available?employeeId=${user.employeeId}`);
+      const res = await axios.get(`${API_ENDPOINTS.QUEST}/available?employeeId=${user.employeeId}`);
       setQuests(res.data);
     } catch (err) {
       console.error('퀘스트 조회 실패:', err);
@@ -26,7 +26,7 @@ function QuestList({ user }) {
 
   const fetchMyQuests = async () => {
     try {
-      const res = await axios.get(`${API_ENDPOINTS.EMPLOYEE}/quests/my-quests?employeeId=${user.employeeId}`);
+      const res = await axios.get(`${API_ENDPOINTS.QUEST}/my-quests?employeeId=${user.employeeId}`);
       setMyQuests(res.data);
     } catch (err) {
       console.error('내 퀘스트 조회 실패:', err);
@@ -36,7 +36,7 @@ function QuestList({ user }) {
 
   const handleAccept = async (questId) => {
     try {
-      await axios.post(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}/accept`, { employeeId: user.employeeId });
+      await axios.post(`${API_ENDPOINTS.QUEST}/${questId}/accept`, { employeeId: user.employeeId });
       alert('퀘스트를 수락했습니다!');
       fetchQuests();
       fetchMyQuests();
@@ -47,7 +47,7 @@ function QuestList({ user }) {
 
   const handleComplete = async (questId) => {
     try {
-      await axios.post(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}/complete`, { employeeId: user.employeeId });
+      await axios.post(`${API_ENDPOINTS.QUEST}/${questId}/complete`, { employeeId: user.employeeId });
       alert('완료 보고했습니다! 부장 승인을 기다려주세요.');
       fetchMyQuests();
     } catch (err) {
@@ -57,7 +57,7 @@ function QuestList({ user }) {
 
   const handleClaim = async (questId) => {
     try {
-      await axios.post(`${API_ENDPOINTS.EMPLOYEE}/quests/${questId}/claim`, { employeeId: user.employeeId });
+      await axios.post(`${API_ENDPOINTS.QUEST}/${questId}/claim`, { employeeId: user.employeeId });
       alert('🎉 보상을 받았습니다! 연차가 추가되었습니다.');
       fetchMyQuests();
     } catch (err) {

@@ -26,8 +26,13 @@ function App() {
 
   const checkAuth = async () => {
     try {
-      const result = await authService.getCurrentUser();
-      setUser(result.user);
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        setUser(JSON.parse(savedUser));
+      } else {
+        const result = await authService.getCurrentUser();
+        setUser(result.user);
+      }
     } catch (err) {
       console.log('Not logged in');
     } finally {
@@ -36,23 +41,33 @@ function App() {
   };
 
   const handleLogin = async (result) => {
-    setUser(result.user);
-    // Employee 생성 (없으면)
     try {
-      await axios.post(`${API_ENDPOINTS.EMPLOYEE}`, {
-        id: result.user.employeeId,
-        name: result.user.name,
-        department: result.user.department,
-        position: result.user.position,
-        email: result.user.email,
-      });
+      // 이메일로 기존 직원 조회
+      const employees = await axios.get(`${API_ENDPOINTS.EMPLOYEE}`);
+      const existing = employees.data.find(e => e.email === result.user.email);
+      
+      if (existing) {
+        result.user.employeeId = existing.id;
+      } else {
+        // 없으면 생성
+        const res = await axios.post(`${API_ENDPOINTS.EMPLOYEE}`, {
+          name: result.user.name,
+          department: result.user.department,
+          position: result.user.position,
+          email: result.user.email,
+        });
+        result.user.employeeId = res.data.id;
+      }
     } catch (err) {
-      console.log('Employee already exists or creation failed');
+      console.log('Employee check failed:', err);
     }
+    localStorage.setItem('user', JSON.stringify(result.user));
+    setUser(result.user);
   };
 
   const handleLogout = () => {
     authService.signOut();
+    localStorage.removeItem('user');
     setUser(null);
   };
 

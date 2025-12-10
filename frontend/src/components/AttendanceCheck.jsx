@@ -16,7 +16,7 @@ function AttendanceCheck({ user }) {
 
   const fetchProgress = async () => {
     try {
-      const res = await axios.get(`${API_ENDPOINTS.EMPLOYEE}/attendance/progress/${user.employeeId}`);
+      const res = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/progress/${user.employeeId}`);
       setProgress(res.data);
     } catch (err) {
       console.error('진행률 조회 실패:', err);
@@ -36,7 +36,7 @@ function AttendanceCheck({ user }) {
   const handleCheckIn = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_ENDPOINTS.EMPLOYEE}/attendance/check-in/${user.employeeId}`);
+      const res = await axios.post(`${API_ENDPOINTS.ATTENDANCE}/check-in/${user.employeeId}`);
       setProgress({
         attendanceCount: res.data.attendanceCount,
         progress: (res.data.attendanceCount % 30) / 30 * 100,

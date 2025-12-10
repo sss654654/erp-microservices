@@ -202,3 +202,66 @@ resource "aws_apigatewayv2_route" "notification_root" {
   route_key = "ANY /api/notifications"
   target    = "integrations/${aws_apigatewayv2_integration.notification_root.id}"
 }
+
+# Attendance Integration
+resource "aws_apigatewayv2_integration" "attendance" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = var.nlb_listener_arns["employee"]
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+
+  request_parameters = {
+    "overwrite:path" = "/attendance/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_route" "attendance" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/attendance/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.attendance.id}"
+}
+
+# Quests Integration
+resource "aws_apigatewayv2_integration" "quests" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = var.nlb_listener_arns["employee"]
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+
+  request_parameters = {
+    "overwrite:path" = "/quests/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_route" "quests" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/quests/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.quests.id}"
+}
+
+# Leaves Integration
+resource "aws_apigatewayv2_integration" "leaves" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = var.nlb_listener_arns["employee"]
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+
+  request_parameters = {
+    "overwrite:path" = "/leaves/$request.path.proxy"
+  }
+}
+
+resource "aws_apigatewayv2_route" "leaves" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /api/leaves/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.leaves.id}"
+}
