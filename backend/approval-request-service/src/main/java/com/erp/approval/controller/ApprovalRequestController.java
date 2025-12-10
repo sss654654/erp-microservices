@@ -34,4 +34,10 @@ public class ApprovalRequestController {
     public ResponseEntity<ApprovalRequest> getApprovalById(@PathVariable Integer requestId) {
         return ResponseEntity.ok(service.getApprovalById(requestId));
     }
+    
+    @DeleteMapping
+    public ResponseEntity<?> deleteAllApprovals() {
+        service.deleteAll();
+        return ResponseEntity.ok(Map.of("message", "All approvals deleted"));
+    }
 }

@@ -164,4 +164,9 @@ public class ApprovalRequestService {
         return repository.findByRequestId(requestId)
                 .orElseThrow(() -> new RuntimeException("Approval not found"));
     }
+    
+    public void deleteAll() {
+        repository.deleteAll();
+        requestIdGenerator.set(1);
+    }
 }
