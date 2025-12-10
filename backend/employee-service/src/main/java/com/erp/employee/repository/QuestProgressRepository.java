@@ -8,5 +8,6 @@ import java.util.Optional;
 public interface QuestProgressRepository extends JpaRepository<QuestProgress, Long> {
     List<QuestProgress> findByEmployeeId(Long employeeId);
     Optional<QuestProgress> findByQuestIdAndEmployeeId(Long questId, Long employeeId);
+    List<QuestProgress> findByQuestId(Long questId);
     List<QuestProgress> findByQuestIdAndStatus(Long questId, String status);
 }

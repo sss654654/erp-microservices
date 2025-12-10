@@ -12,6 +12,20 @@
   font-weight: 600;
 }
 
+.leave-info {
+  background: #e8f5e9;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 0.95em;
+  color: #2e7d32;
+}
+
+.leave-info strong {
+  font-size: 1.1em;
+  color: #1b5e20;
+}
+
 .form-group {
   margin-bottom: 20px;
 }
@@ -75,6 +89,13 @@
 .form-group select:focus {
   outline: none;
   border-color: #667eea;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 6px;
+  color: #7f8c8d;
+  font-size: 0.85em;
 }
 
 .create-approval button[type='submit'] {

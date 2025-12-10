@@ -24,6 +24,35 @@ public class QuestController {
     private final QuestProgressRepository progressRepository;
     private final EmployeeRepository employeeRepository;
     
+    // 전체 퀘스트 목록 (progressList 포함)
+    @GetMapping
+    public ResponseEntity<?> getAllQuests() {
+        List<Quest> quests = questRepository.findAll();
+        
+        return ResponseEntity.ok(quests.stream()
+            .filter(q -> !"DELETED".equals(q.getStatus()))
+            .map(q -> {
+                List<QuestProgress> progresses = progressRepository.findByQuestId(q.getId());
+                
+                return Map.of(
+                    "id", q.getId(),
+                    "title", q.getTitle(),
+                    "description", q.getDescription(),
+                    "rewardDays", q.getRewardDays(),
+                    "department", q.getDepartment(),
+                    "createdBy", q.getCreatedBy(),
+                    "status", q.getStatus(),
+                    "progressList", progresses.stream().map(p -> Map.of(
+                        "id", p.getId(),
+                        "employeeId", p.getEmployeeId(),
+                        "employeeName", employeeRepository.findById(p.getEmployeeId())
+                            .map(Employee::getName).orElse("Unknown"),
+                        "status", p.getStatus()
+                    )).collect(Collectors.toList())
+                );
+            }).collect(Collectors.toList()));
+    }
+    
     // 사원: 가능한 업무 목록
     @GetMapping("/available")
     public ResponseEntity<?> getAvailableQuests(@RequestParam Long employeeId) {

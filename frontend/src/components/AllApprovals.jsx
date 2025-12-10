@@ -17,6 +17,7 @@ function AllApprovals({ refresh }) {
       setApprovals(res.data);
     } catch (err) {
       console.error('결재 목록 조회 실패:', err);
+      setApprovals([]);
     } finally {
       setLoading(false);
     }
@@ -24,9 +25,9 @@ function AllApprovals({ refresh }) {
 
   const getStatusText = (status) => {
     const statusMap = {
-      PENDING: '대기',
-      APPROVED: '승인',
-      REJECTED: '반려',
+      PENDING: '⏳ 대기',
+      APPROVED: '✓ 승인',
+      REJECTED: '✗ 반려',
     };
     return statusMap[status] || status;
   };
@@ -35,7 +36,7 @@ function AllApprovals({ refresh }) {
 
   return (
     <div className="all-approvals">
-      <h2>전체 결재 내역</h2>
+      <h2>📊 전체 결재 내역</h2>
       {approvals.length === 0 ? (
         <p className="empty">결재 내역이 없습니다</p>
       ) : (
@@ -46,22 +47,30 @@ function AllApprovals({ refresh }) {
               <th>유형</th>
               <th>내용</th>
               <th>요청자</th>
+              <th>연차일수</th>
               <th>상태</th>
             </tr>
           </thead>
           <tbody>
             {approvals.map((approval) => (
-              <tr key={approval.requestId}>
-                <td>{approval.requestId}</td>
-                <td>{approval.title}</td>
-                <td>{approval.content}</td>
+              <tr key={approval.id}>
+                <td>{approval.id}</td>
+                <td>
+                  <span className={`type-badge ${approval.type?.toLowerCase()}`}>
+                    {approval.title}
+                  </span>
+                </td>
+                <td className="content-cell">{approval.content}</td>
                 <td>{approval.requesterId}</td>
                 <td>
-                  {approval.status && (
-                    <span className={`status ${approval.status.toLowerCase()}`}>
-                      {getStatusText(approval.status)}
-                    </span>
-                  )}
+                  {approval.type === 'ANNUAL_LEAVE' && approval.leaveDays 
+                    ? `${approval.leaveDays}일` 
+                    : '-'}
+                </td>
+                <td>
+                  <span className={`status ${approval.status?.toLowerCase()}`}>
+                    {getStatusText(approval.status)}
+                  </span>
                 </td>
               </tr>
             ))}
@@ -73,3 +82,4 @@ function AllApprovals({ refresh }) {
 }
 
 export default AllApprovals;
+

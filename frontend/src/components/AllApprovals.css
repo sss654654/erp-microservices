@@ -1,22 +1,19 @@
 .all-approvals {
   background: white;
-  padding: 30px;
+  padding: 2rem;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .all-approvals h2 {
-  margin: 0 0 24px 0;
-  font-size: 1.5em;
-  color: #1a1a1a;
-  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+  color: #2c3e50;
 }
 
 .all-approvals .empty {
   text-align: center;
-  color: #999;
-  padding: 40px;
-  font-size: 0.95em;
+  color: #95a5a6;
+  padding: 2rem;
 }
 
 .all-approvals table {
@@ -25,45 +22,68 @@
 }
 
 .all-approvals th {
+  background: #f8f9fa;
+  padding: 1rem;
   text-align: left;
-  padding: 12px;
-  background: #fafafa;
-  border-bottom: 2px solid #e8e8e8;
   font-weight: 600;
-  color: #333;
-  font-size: 0.9em;
+  color: #2c3e50;
+  border-bottom: 2px solid #e0e0e0;
 }
 
 .all-approvals td {
-  padding: 14px 12px;
+  padding: 1rem;
   border-bottom: 1px solid #f0f0f0;
-  color: #444;
-  font-size: 0.95em;
 }
 
-.all-approvals tr:hover {
-  background: #fafafa;
+.all-approvals .content-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.all-approvals .type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.all-approvals .type-badge.annual_leave {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.all-approvals .type-badge.expense {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.all-approvals .type-badge.project {
+  background: #f3e5f5;
+  color: #7b1fa2;
 }
 
 .all-approvals .status {
   display: inline-block;
-  padding: 4px 12px;
+  padding: 0.4rem 0.8rem;
   border-radius: 12px;
-  font-size: 0.85em;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 
 .all-approvals .status.pending {
-  background: #fef3c7;
-  color: #92400e;
+  background: #fff3cd;
+  color: #856404;
 }
 
 .all-approvals .status.approved {
-  background: #d1fae5;
-  color: #065f46;
+  background: #d4edda;
+  color: #155724;
 }
 
 .all-approvals .status.rejected {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #f8d7da;
+  color: #721c24;
 }
