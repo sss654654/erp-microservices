@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/employees")
@@ -20,14 +21,12 @@ public class EmployeeController {
     
     private final EmployeeService employeeService;
     
-    // POST /employees - 직원 생성
     @PostMapping
     public ResponseEntity<Map<String, Long>> createEmployee(@Valid @RequestBody EmployeeRequest request) {
         Employee employee = employeeService.createEmployee(request);
         return ResponseEntity.ok(Map.of("id", employee.getId()));
     }
     
-    // GET /employees - 직원 목록 조회 (필터링 지원)
     @GetMapping
     public ResponseEntity<List<Employee>> getEmployees(
             @RequestParam(required = false) String department,
@@ -36,14 +35,12 @@ public class EmployeeController {
         return ResponseEntity.ok(employees);
     }
     
-    // GET /employees/{id} - 직원 상세 조회
     @GetMapping("/{id}")
     public ResponseEntity<Employee> getEmployee(@PathVariable Long id) {
         Employee employee = employeeService.getEmployeeById(id);
         return ResponseEntity.ok(employee);
     }
     
-    // PUT /employees/{id} - 직원 수정
     @PutMapping("/{id}")
     public ResponseEntity<Employee> updateEmployee(
             @PathVariable Long id,
@@ -52,10 +49,54 @@ public class EmployeeController {
         return ResponseEntity.ok(employee);
     }
     
-    // DELETE /employees/{id} - 직원 삭제
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteEmployee(@PathVariable Long id) {
         employeeService.deleteEmployee(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    // 부장: 팀원 목록 조회
+    @GetMapping("/team")
+    public ResponseEntity<?> getTeamMembers(@RequestParam String department) {
+        List<Employee> employees = employeeService.getEmployees(department, null);
+        
+        return ResponseEntity.ok(employees.stream().map(e -> Map.of(
+            "id", e.getId(),
+            "name", e.getName(),
+            "position", e.getPosition(),
+            "leaveBalance", e.getAnnualLeaveBalance()
+        )).collect(Collectors.toList()));
+    }
+    
+    // 부장: 연차 조정
+    @PutMapping("/{id}/leave-balance")
+    public ResponseEntity<?> adjustLeaveBalance(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        
+        Employee employee = employeeService.getEmployeeById(id);
+        int adjustment = ((Number) body.get("adjustment")).intValue();
+        
+        employee.setAnnualLeaveBalance(employee.getAnnualLeaveBalance() + adjustment);
+        employeeService.updateEmployee(id, new EmployeeUpdateRequest(
+            employee.getDepartment(),
+            employee.getPosition()
+        ));
+        
+        return ResponseEntity.ok(Map.of(
+            "newBalance", employee.getAnnualLeaveBalance(),
+            "message", "연차 조정 완료"
+        ));
+    }
+    
+    // 연차 현황 조회
+    @GetMapping("/{id}/leave-balance")
+    public ResponseEntity<?> getLeaveBalance(@PathVariable Long id) {
+        Employee employee = employeeService.getEmployeeById(id);
+        
+        return ResponseEntity.ok(Map.of(
+            "totalLeave", employee.getAnnualLeaveBalance(),
+            "remainingLeave", employee.getAnnualLeaveBalance()
+        ));
     }
 }
