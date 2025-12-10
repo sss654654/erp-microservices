@@ -3,6 +3,7 @@ package com.erp.notification.listener;
 import com.erp.notification.model.NotificationMessage;
 import com.erp.notification.service.NotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
@@ -15,7 +16,13 @@ import org.springframework.stereotype.Component;
 public class RedisMessageSubscriber implements MessageListener {
     
     private final NotificationService notificationService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+    
+    public RedisMessageSubscriber(NotificationService notificationService) {
+        this.notificationService = notificationService;
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+    }
     
     @Override
     public void onMessage(Message message, byte[] pattern) {
