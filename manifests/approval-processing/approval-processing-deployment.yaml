@@ -42,6 +42,13 @@ spec:
         - containerPort: 9090
           name: grpc
         env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: erp-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          value: "6379"
         - name: GRPC_CLIENT_APPROVALREQUESTSERVICE_ADDRESS
           valueFrom:
             configMapKeyRef:
