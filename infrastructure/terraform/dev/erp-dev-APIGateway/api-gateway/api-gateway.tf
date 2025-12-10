@@ -37,9 +37,9 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 }
 
 # Stage
-resource "aws_apigatewayv2_stage" "dev" {
+resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
-  name        = "dev"
+  name        = "$default"
   auto_deploy = true
 
   access_log_settings {
@@ -243,6 +243,27 @@ resource "aws_apigatewayv2_route" "quests" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /api/quests/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.quests.id}"
+}
+
+# Quests POST route (for creating quests)
+resource "aws_apigatewayv2_integration" "quests_root" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = var.nlb_listener_arns["employee"]
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
+
+  request_parameters = {
+    "overwrite:path" = "/quests"
+  }
+}
+
+resource "aws_apigatewayv2_route" "quests_root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "POST /api/quests"
+  target    = "integrations/${aws_apigatewayv2_integration.quests_root.id}"
 }
 
 # Leaves Integration
