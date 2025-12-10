@@ -166,7 +166,8 @@ Private Subnet: 10.0.10.0/24, 10.0.11.0/24
 Cluster: erp-dev
 Version: 1.31
 Node Type: t3.small
-Desired: 2, Min: 1, Max: 3
+Desired: 3 (Kafka 설치를 위해 1개 추가)
+Min: 1, Max: 3
 ```
 
 **RDS**
@@ -181,9 +182,11 @@ Multi-AZ: false
 
 ## 비용
 
-**월 예상 비용**: $191
+**월 예상 비용**: $206
 
-EKS $73, Worker Nodes $30, RDS $15, ElastiCache $12, NAT Gateway $32, NLB $16, 기타 $13
+EKS $73, Worker Nodes $45 (3개), RDS $15, ElastiCache $12, NAT Gateway $32, NLB $16, 기타 $13
+
+**Worker Node 3개 이유**: Kafka 설치를 위한 메모리 확보 (기존 2개 Node는 메모리 부족)
 
 ---
 

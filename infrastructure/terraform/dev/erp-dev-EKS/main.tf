@@ -73,7 +73,7 @@ module "eks_node_group" {
   private_subnet_ids  = data.terraform_remote_state.vpc.outputs.private_subnet_ids
   eks_node_role_arn   = data.terraform_remote_state.iam.outputs.eks_node_role_arn
   node_instance_types = ["t3.small"]
-  node_desired_size   = 2
+  node_desired_size   = 3  # Kafka 설치를 위해 3개로 증가
   node_min_size       = 1
   node_max_size       = 3
 }
