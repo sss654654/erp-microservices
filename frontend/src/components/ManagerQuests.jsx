@@ -23,6 +23,7 @@ function ManagerQuests({ user }) {
       setQuests(res.data);
     } catch (err) {
       console.error('퀘스트 조회 실패:', err);
+      setQuests([]);
     }
   };
 

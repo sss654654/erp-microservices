@@ -6,10 +6,12 @@ import './AttendanceCheck.css';
 
 function AttendanceCheck({ user }) {
   const [progress, setProgress] = useState({ attendanceCount: 0, progress: 0, nextRewardAt: 30 });
+  const [leaveBalance, setLeaveBalance] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchProgress();
+    fetchLeaveBalance();
   }, []);
 
   const fetchProgress = async () => {
@@ -18,6 +20,16 @@ function AttendanceCheck({ user }) {
       setProgress(res.data);
     } catch (err) {
       console.error('진행률 조회 실패:', err);
+      setProgress({ attendanceCount: 0, progress: 0, nextRewardAt: 30 });
+    }
+  };
+
+  const fetchLeaveBalance = async () => {
+    try {
+      const res = await axios.get(`${API_ENDPOINTS.EMPLOYEE}/${user.employeeId}`);
+      setLeaveBalance(res.data.annualLeaveBalance || 0);
+    } catch (err) {
+      console.error('연차 조회 실패:', err);
     }
   };
 
@@ -31,7 +43,8 @@ function AttendanceCheck({ user }) {
         nextRewardAt: 30 - (res.data.attendanceCount % 30),
       });
       if (res.data.rewardEarned) {
-        alert('🎉 30일 출석 달성! 연차 1일이 지급되었습니다!');
+        alert('30일 출석 달성! 연차 1일이 지급되었습니다!');
+        fetchLeaveBalance();
       }
     } catch (err) {
       alert(err.response?.data?.message || '출근 처리 실패');
@@ -47,7 +60,11 @@ function AttendanceCheck({ user }) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <h2>📅 출석 체크</h2>
+      <h2>출석 체크</h2>
+      <div className="leave-info">
+        <span>보유 연차</span>
+        <span className="leave-count">{leaveBalance}일</span>
+      </div>
       <div className="progress-container">
         <div className="progress-text">
           <span className="count">{progress.attendanceCount % 30} / 30일</span>
@@ -63,9 +80,9 @@ function AttendanceCheck({ user }) {
         </div>
       </div>
       <button onClick={handleCheckIn} disabled={loading} className="check-in-btn">
-        {loading ? '처리 중...' : '🏢 출근하기'}
+        {loading ? '처리 중...' : '출근하기'}
       </button>
-      <p className="info">💡 30일 출석 시 연차 1일 자동 지급!</p>
+      <p className="info">30일 출석 시 연차 1일 자동 지급</p>
     </motion.div>
   );
 }

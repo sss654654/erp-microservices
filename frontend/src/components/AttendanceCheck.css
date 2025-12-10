@@ -11,6 +11,26 @@
   font-size: 1.8em;
 }
 
+.leave-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.leave-info span {
+  font-size: 1.1em;
+}
+
+.leave-count {
+  font-size: 1.5em !important;
+  font-weight: bold;
+  color: #ffd700;
+}
+
 .progress-container {
   margin-bottom: 20px;
 }

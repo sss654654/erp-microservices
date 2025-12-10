@@ -3,6 +3,10 @@ resource "aws_cognito_user_pool" "main" {
 
   username_attributes = ["email"]
 
+  lambda_config {
+    pre_sign_up = aws_lambda_function.auto_confirm.arn
+  }
+
   password_policy {
     minimum_length    = 6
     require_lowercase = false

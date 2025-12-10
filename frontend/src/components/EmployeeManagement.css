@@ -1,0 +1,46 @@
+.employee-management {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.employee-management h2 {
+  margin: 0 0 24px 0;
+  font-size: 1.5em;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.employee-management .empty {
+  text-align: center;
+  color: #999;
+  padding: 40px;
+  font-size: 0.95em;
+}
+
+.employee-management table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.employee-management th {
+  text-align: left;
+  padding: 12px;
+  background: #fafafa;
+  border-bottom: 2px solid #e8e8e8;
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9em;
+}
+
+.employee-management td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #444;
+  font-size: 0.95em;
+}
+
+.employee-management tr:hover {
+  background: #fafafa;
+}

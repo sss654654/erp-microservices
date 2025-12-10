@@ -20,6 +20,7 @@ function QuestList({ user }) {
       setQuests(res.data);
     } catch (err) {
       console.error('퀘스트 조회 실패:', err);
+      setQuests([]);
     }
   };
 
@@ -29,6 +30,7 @@ function QuestList({ user }) {
       setMyQuests(res.data);
     } catch (err) {
       console.error('내 퀘스트 조회 실패:', err);
+      setMyQuests([]);
     }
   };
 

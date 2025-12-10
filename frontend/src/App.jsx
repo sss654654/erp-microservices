@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 import { authService } from './services/authService';
+import { API_ENDPOINTS } from './config/api';
 import Login from './components/Login';
 import AttendanceCheck from './components/AttendanceCheck';
 import QuestList from './components/QuestList';
@@ -33,8 +35,20 @@ function App() {
     }
   };
 
-  const handleLogin = (result) => {
+  const handleLogin = async (result) => {
     setUser(result.user);
+    // Employee 생성 (없으면)
+    try {
+      await axios.post(`${API_ENDPOINTS.EMPLOYEE}`, {
+        id: result.user.employeeId,
+        name: result.user.name,
+        department: result.user.department,
+        position: result.user.position,
+        email: result.user.email,
+      });
+    } catch (err) {
+      console.log('Employee already exists or creation failed');
+    }
   };
 
   const handleLogout = () => {
@@ -137,7 +151,7 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <EmployeeManagement />
+              <EmployeeManagement user={user} />
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
 import './CreateApproval.css';
@@ -7,8 +7,9 @@ function CreateApproval({ onSuccess, user }) {
   const [formData, setFormData] = useState({
     type: 'LEAVE',
     content: '',
-    steps: [{ step: 1, approverId: '' }],
+    approverId: '',
   });
+  const [managers, setManagers] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const types = [
@@ -18,6 +19,20 @@ function CreateApproval({ onSuccess, user }) {
     { value: 'PROJECT', label: '프로젝트' },
   ];
 
+  useEffect(() => {
+    fetchManagers();
+  }, []);
+
+  const fetchManagers = async () => {
+    try {
+      const res = await axios.get(API_ENDPOINTS.EMPLOYEE);
+      const managerList = res.data.filter(emp => emp.position === 'MANAGER');
+      setManagers(managerList);
+    } catch (err) {
+      console.error('부장 목록 조회 실패:', err);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -26,10 +41,10 @@ function CreateApproval({ onSuccess, user }) {
         requesterId: user.employeeId,
         title: formData.type,
         content: formData.content,
-        steps: formData.steps,
+        steps: [{ step: 1, approverId: parseInt(formData.approverId) }],
       });
       alert('결재 요청이 생성되었습니다');
-      setFormData({ type: 'LEAVE', content: '', steps: [{ step: 1, approverId: '' }] });
+      setFormData({ type: 'LEAVE', content: '', approverId: '' });
       onSuccess();
     } catch (err) {
       alert(err.response?.data?.message || '생성 실패');
@@ -69,19 +84,19 @@ function CreateApproval({ onSuccess, user }) {
         </div>
 
         <div className="form-group">
-          <label>결재자 ID</label>
-          <input
-            type="number"
-            value={formData.steps[0].approverId}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                steps: [{ step: 1, approverId: parseInt(e.target.value) }],
-              })
-            }
-            placeholder="결재자 ID"
+          <label>결재자</label>
+          <select
+            value={formData.approverId}
+            onChange={(e) => setFormData({ ...formData, approverId: e.target.value })}
             required
-          />
+          >
+            <option value="">결재자를 선택하세요</option>
+            {managers.map((manager) => (
+              <option key={manager.id} value={manager.id}>
+                {manager.name} ({manager.department})
+              </option>
+            ))}
+          </select>
         </div>
 
         <button type="submit" disabled={loading}>
