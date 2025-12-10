@@ -210,6 +210,152 @@ curl https://API_GATEWAY_URL/api/leaves/balance/1
 
 ---
 
+## 🎮 추가 구현 (3단계: 창의 영역)
+
+### 게이미피케이션 퀘스트 시스템
+
+#### 개념
+직원의 출석과 업무 수행을 게임화하여 연차를 보상으로 지급하는 시스템
+
+#### 1. 기본 퀘스트 (자동)
+- **30일 출석 달성**: 출석 30일마다 연차 1일 자동 지급
+- **진행률 표시**: 실시간 진행률 (예: 15/30 = 50%)
+- **자동 리셋**: 30일 달성 시 0으로 리셋, 다시 시작
+
+#### 2. 커스텀 퀘스트 (부장 생성)
+- **부장**: 업무 생성 (제목, 내용, 보상 연차)
+- **사원**: 업무 수락 → 오프라인 수행 → 완료 보고
+- **부장**: 확인 후 승인 → 사원 연차 지급 활성화
+- **사원**: 보상 받기 클릭 → 연차 추가
+
+#### 퀘스트 API
+
+**출석 퀘스트:**
+```bash
+# 출근 (출석 +1, 30일마다 연차 +1)
+POST /attendance/check-in/{employeeId}
+Response: {
+  "attendanceCount": 16,
+  "questProgress": 53,
+  "rewardEarned": false,
+  "currentLeaveBalance": 3.0
+}
+
+# 진행률 조회
+GET /attendance/progress/{employeeId}
+Response: {
+  "attendanceCount": 16,
+  "targetCount": 30,
+  "progress": 53,
+  "nextRewardAt": 14
+}
+```
+
+**커스텀 퀘스트 (사원):**
+```bash
+# 가능한 업무 목록
+GET /quests/available?employeeId=1
+
+# 업무 수락
+POST /quests/{questId}/accept
+Body: { "employeeId": 1 }
+
+# 완료 보고
+POST /quests/{questId}/complete
+Body: { "employeeId": 1 }
+
+# 내 퀘스트 목록
+GET /quests/my-quests?employeeId=1
+
+# 보상 받기
+POST /quests/{questId}/claim
+Body: { "employeeId": 1 }
+```
+
+**커스텀 퀘스트 (부장):**
+```bash
+# 업무 생성
+POST /quests
+Body: {
+  "title": "커피 끓여오기",
+  "description": "아메리카노 2잔",
+  "rewardDays": 0.5,
+  "department": "DEVELOPMENT",
+  "createdBy": 2
+}
+
+# 내가 만든 업무
+GET /quests/my-created?managerId=2
+
+# 승인
+PUT /quests/{questId}/approve
+Body: { "managerId": 2 }
+
+# 반려
+PUT /quests/{questId}/reject
+Body: { "managerId": 2, "reason": "다시 해주세요" }
+
+# 삭제
+DELETE /quests/{questId}
+```
+
+**팀 관리 (부장):**
+```bash
+# 팀원 목록 조회
+GET /employees/team?department=DEVELOPMENT
+
+# 연차 수동 조정
+PUT /employees/{id}/leave-balance
+Body: { "managerId": 2, "adjustment": 1 }  # +1 or -1
+```
+
+#### 퀘스트 상태 흐름
+```
+AVAILABLE (생성됨)
+  ↓ accept
+IN_PROGRESS (진행 중)
+  ↓ complete
+WAITING_APPROVAL (승인 대기)
+  ↓ approve
+APPROVED (승인됨)
+  ↓ claim
+CLAIMED (보상 받음)
+```
+
+#### 데이터베이스 테이블
+
+**quests:**
+```sql
+- id: 퀘스트 ID
+- title: 제목
+- description: 설명
+- reward_days: 보상 연차 (0.5, 1.0 등)
+- department: 부서
+- created_by: 생성자 (부장 ID)
+- status: AVAILABLE, DELETED
+```
+
+**quest_progress:**
+```sql
+- id: 진행 ID
+- quest_id: 퀘스트 ID
+- employee_id: 직원 ID
+- status: IN_PROGRESS, WAITING_APPROVAL, APPROVED, REJECTED, CLAIMED
+- accepted_at: 수락 시간
+- completed_at: 완료 시간
+- approved_at: 승인 시간
+- claimed_at: 보상 받은 시간
+```
+
+**employees (추가 필드):**
+```sql
+- email: 이메일 (unique)
+- annual_leave_balance: 보유 연차
+- attendance_count: 출석 일수
+```
+
+---
+
 ## 백업 및 복원
 
 ### gRPC 코드 백업 (2단계)
