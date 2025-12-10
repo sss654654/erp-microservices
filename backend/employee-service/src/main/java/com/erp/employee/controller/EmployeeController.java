@@ -78,10 +78,7 @@ public class EmployeeController {
         int adjustment = ((Number) body.get("adjustment")).intValue();
         
         employee.setAnnualLeaveBalance(employee.getAnnualLeaveBalance() + adjustment);
-        employeeService.updateEmployee(id, new EmployeeUpdateRequest(
-            employee.getDepartment(),
-            employee.getPosition()
-        ));
+        employeeService.save(employee);
         
         return ResponseEntity.ok(Map.of(
             "newBalance", employee.getAnnualLeaveBalance(),

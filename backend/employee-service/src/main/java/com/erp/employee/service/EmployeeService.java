@@ -79,4 +79,10 @@ public class EmployeeService {
         }
         employeeRepository.deleteById(id);
     }
+    
+    // 저장
+    @Transactional
+    public Employee save(Employee employee) {
+        return employeeRepository.save(employee);
+    }
 }
