@@ -32,7 +32,12 @@ public class ProcessingGrpcClient {
                 .addAllSteps(protoSteps)
                 .build();
         
-        ApprovalResponse response = approvalStub.requestApproval(request);
-        System.out.println("gRPC RequestApproval 응답: " + response.getStatus());
+        try {
+            ApprovalResponse response = approvalStub.requestApproval(request);
+            System.out.println("gRPC RequestApproval 응답: " + response.getStatus());
+        } catch (io.grpc.StatusRuntimeException e) {
+            System.err.println("Processing Service 연결 실패: " + e.getStatus());
+            throw new RuntimeException("Processing Service 연결 실패", e);
+        }
     }
 }
