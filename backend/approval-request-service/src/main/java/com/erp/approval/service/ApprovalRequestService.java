@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,7 +21,7 @@ public class ApprovalRequestService {
     private final EmployeeClient employeeClient;
     private final ProcessingGrpcClient processingGrpcClient;
     private final RestTemplate restTemplate;
-    private final AtomicInteger requestIdGenerator = new AtomicInteger(1);
+    private final SequenceGeneratorService sequenceGenerator;
     
     @Value("${notification.service.url}")
     private String notificationServiceUrl;
@@ -30,11 +29,13 @@ public class ApprovalRequestService {
     public ApprovalRequestService(ApprovalRequestRepository repository,
                                   EmployeeClient employeeClient,
                                   ProcessingGrpcClient processingGrpcClient,
-                                  RestTemplate restTemplate) {
+                                  RestTemplate restTemplate,
+                                  SequenceGeneratorService sequenceGenerator) {
         this.repository = repository;
         this.employeeClient = employeeClient;
         this.processingGrpcClient = processingGrpcClient;
         this.restTemplate = restTemplate;
+        this.sequenceGenerator = sequenceGenerator;
     }
     
     public ApprovalRequest createApproval(CreateApprovalRequest request) {
@@ -58,7 +59,7 @@ public class ApprovalRequestService {
         
         // 3. MongoDB에 저장
         ApprovalRequest approval = new ApprovalRequest();
-        approval.setRequestId(requestIdGenerator.getAndIncrement());
+        approval.setRequestId(sequenceGenerator.generateSequence("approval_request_seq"));
         approval.setRequesterId(request.getRequesterId());
         approval.setTitle(request.getTitle());
         approval.setContent(request.getContent());
@@ -167,6 +168,5 @@ public class ApprovalRequestService {
     
     public void deleteAll() {
         repository.deleteAll();
-        requestIdGenerator.set(1);
     }
 }
