@@ -31,6 +31,8 @@ export const authService = {
       user.authenticateUser(authDetails, {
         onSuccess: (result) => {
           const payload = result.getIdToken().decodePayload();
+          // employeeId가 없으면 임시로 생성 (1-100 랜덤)
+          const employeeId = payload['custom:employeeId'] || Math.floor(Math.random() * 100) + 1;
           resolve({
             token: result.getIdToken().getJwtToken(),
             user: {
@@ -38,7 +40,7 @@ export const authService = {
               name: payload.name,
               position: payload['custom:position'],
               department: payload['custom:department'],
-              employeeId: payload['custom:employeeId'],
+              employeeId: employeeId,
             },
           });
         },
@@ -77,6 +79,9 @@ export const authService = {
             userData[attr.Name] = attr.Value;
           });
 
+          // employeeId가 없으면 임시로 생성
+          const employeeId = userData['custom:employeeId'] || Math.floor(Math.random() * 100) + 1;
+
           resolve({
             token: session.getIdToken().getJwtToken(),
             user: {
@@ -84,7 +89,7 @@ export const authService = {
               name: userData.name,
               position: userData['custom:position'],
               department: userData['custom:department'],
-              employeeId: userData['custom:employeeId'],
+              employeeId: employeeId,
             },
           });
         });

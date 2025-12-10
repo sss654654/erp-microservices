@@ -57,9 +57,11 @@ function AllApprovals({ refresh }) {
                 <td>{approval.content}</td>
                 <td>{approval.requesterId}</td>
                 <td>
-                  <span className={`status ${approval.status.toLowerCase()}`}>
-                    {getStatusText(approval.status)}
-                  </span>
+                  {approval.status && (
+                    <span className={`status ${approval.status.toLowerCase()}`}>
+                      {getStatusText(approval.status)}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
