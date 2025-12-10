@@ -73,7 +73,9 @@ public class EmployeeService {
     // 삭제
     @Transactional
     public void deleteEmployee(Long id) {
-        Employee employee = getEmployeeById(id);
-        employeeRepository.delete(employee);
+        if (!employeeRepository.existsById(id)) {
+            throw new RuntimeException("직원을 찾을 수 없습니다: " + id);
+        }
+        employeeRepository.deleteById(id);
     }
 }
