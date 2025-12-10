@@ -1,101 +1,72 @@
 import { useState, useEffect } from 'react';
-import { approvalService } from '../services/approvalService';
+import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
+import './AllApprovals.css';
 
 function AllApprovals({ refresh }) {
   const [approvals, setApprovals] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const loadApprovals = async () => {
-    setLoading(true);
+  useEffect(() => {
+    fetchApprovals();
+  }, [refresh]);
+
+  const fetchApprovals = async () => {
     try {
-      const response = await approvalService.getApprovals();
-      setApprovals(response.data);
-    } catch (error) {
-      console.error('Error loading approvals:', error);
+      const res = await axios.get(API_ENDPOINTS.APPROVAL_REQUEST);
+      setApprovals(res.data);
+    } catch (err) {
+      console.error('결재 목록 조회 실패:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadApprovals();
-  }, [refresh]);
-
   const getStatusText = (status) => {
-    const map = { pending: '대기중', approved: '승인', rejected: '반려' };
-    return map[status] || status;
-  };
-
-  const getFinalStatusText = (status) => {
-    const map = {
-      in_progress: '진행중',
-      approved: '승인완료',
-      rejected: '반려됨',
+    const statusMap = {
+      PENDING: '대기',
+      APPROVED: '승인',
+      REJECTED: '반려',
     };
-    return map[status] || status;
+    return statusMap[status] || status;
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  if (loading) return <div className="all-approvals"><p>로딩 중...</p></div>;
 
   return (
-    <section className="section">
-      <h2>📊 전체 결재 현황</h2>
-      <button onClick={loadApprovals} className="btn btn-secondary">
-        새로고침
-      </button>
-
-      {loading ? (
-        <div className="loading">로딩 중...</div>
-      ) : approvals.length === 0 ? (
-        <div className="empty-state">결재 요청이 없습니다</div>
+    <div className="all-approvals">
+      <h2>전체 결재 내역</h2>
+      {approvals.length === 0 ? (
+        <p className="empty">결재 내역이 없습니다</p>
       ) : (
-        <div className="approval-list">
-          {approvals.map((item) => (
-            <div key={item.id} className="approval-card">
-              <div className="approval-header">
-                <span className="approval-title">{item.title}</span>
-                <div>
-                  <span className="approval-id">ID: {item.requestId}</span>
-                  <span className={`status-badge status-${item.finalStatus.replace('_', '-')}`}>
-                    {getFinalStatusText(item.finalStatus)}
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>유형</th>
+              <th>내용</th>
+              <th>요청자</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {approvals.map((approval) => (
+              <tr key={approval.requestId}>
+                <td>{approval.requestId}</td>
+                <td>{approval.title}</td>
+                <td>{approval.content}</td>
+                <td>{approval.requesterId}</td>
+                <td>
+                  <span className={`status ${approval.status.toLowerCase()}`}>
+                    {getStatusText(approval.status)}
                   </span>
-                </div>
-              </div>
-              <div className="approval-content">{item.content}</div>
-              <div className="approval-steps">
-                {item.steps.map((step) => (
-                  <div key={step.step} className={`step step-${step.status}`}>
-                    {step.step}단계: {step.approverId}번 결재자
-                    <br />
-                    <strong>{getStatusText(step.status)}</strong>
-                    {step.updatedAt && (
-                      <>
-                        <br />
-                        <small>{formatDate(step.updatedAt)}</small>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <small style={{ color: '#999' }}>
-                생성: {formatDate(item.createdAt)}
-                {item.updatedAt && ` | 수정: ${formatDate(item.updatedAt)}`}
-              </small>
-            </div>
-          ))}
-        </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-    </section>
+    </div>
   );
 }
 

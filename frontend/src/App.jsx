@@ -49,13 +49,7 @@ function App() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="spinner"
-        >
-          ⚙️
-        </motion.div>
+        <div className="spinner">로딩 중...</div>
       </div>
     );
   }
@@ -69,7 +63,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🏢 ERP 시스템</h1>
+        <h1>ERP 시스템</h1>
         <div className="user-info">
           <span className="user-name">{user.name}</span>
           <span className="user-position">{user.position === 'MANAGER' ? '부장' : '사원'}</span>
@@ -85,20 +79,20 @@ function App() {
           className={activeTab === 'dashboard' ? 'active' : ''}
           onClick={() => setActiveTab('dashboard')}
         >
-          📊 대시보드
+          대시보드
         </button>
         <button
           className={activeTab === 'approval' ? 'active' : ''}
           onClick={() => setActiveTab('approval')}
         >
-          📋 결재
+          결재
         </button>
         {isManager && (
           <button
             className={activeTab === 'manage' ? 'active' : ''}
             onClick={() => setActiveTab('manage')}
           >
-            👥 관리
+            관리
           </button>
         )}
       </nav>
@@ -130,7 +124,7 @@ function App() {
               exit={{ opacity: 0, y: -20 }}
               className="approval-section"
             >
-              <CreateApproval onSuccess={handleSuccess} />
+              <CreateApproval onSuccess={handleSuccess} user={user} />
               <ApprovalQueue approverId={user.employeeId} refresh={refreshKey} />
               <AllApprovals refresh={refreshKey} />
             </motion.div>

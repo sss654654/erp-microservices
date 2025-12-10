@@ -1,113 +1,94 @@
 import { useState } from 'react';
-import { approvalService } from '../services/approvalService';
+import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
+import './CreateApproval.css';
 
-function CreateApproval({ onSuccess }) {
+function CreateApproval({ onSuccess, user }) {
   const [formData, setFormData] = useState({
-    requesterId: '',
-    title: '',
+    type: 'LEAVE',
     content: '',
-    approver1: '',
-    approver2: '',
+    steps: [{ step: 1, approverId: '' }],
   });
+  const [loading, setLoading] = useState(false);
+
+  const types = [
+    { value: 'LEAVE', label: '휴가' },
+    { value: 'ANNUAL_LEAVE', label: '연차' },
+    { value: 'EXPENSE', label: '지출' },
+    { value: 'PROJECT', label: '프로젝트' },
+  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const data = {
-      requesterId: parseInt(formData.requesterId),
-      title: formData.title,
-      content: formData.content,
-      steps: [
-        { step: 1, approverId: parseInt(formData.approver1) },
-        { step: 2, approverId: parseInt(formData.approver2) },
-      ],
-    };
-
+    setLoading(true);
     try {
-      const response = await approvalService.createApproval(data);
-      alert(`결재 요청이 생성되었습니다! (ID: ${response.data.requestId})`);
-      setFormData({
-        requesterId: '',
-        title: '',
-        content: '',
-        approver1: '',
-        approver2: '',
+      await axios.post(API_ENDPOINTS.APPROVAL_REQUEST, {
+        requesterId: user.employeeId,
+        title: formData.type,
+        content: formData.content,
+        steps: formData.steps,
       });
+      alert('결재 요청이 생성되었습니다');
+      setFormData({ type: 'LEAVE', content: '', steps: [{ step: 1, approverId: '' }] });
       onSuccess();
-    } catch (error) {
-      alert('결재 요청 생성 실패: ' + error.message);
+    } catch (err) {
+      alert(err.response?.data?.message || '생성 실패');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
   return (
-    <section className="section">
-      <h2>📝 결재 요청 생성</h2>
+    <div className="create-approval">
+      <h2>결재 요청</h2>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>요청자 ID</label>
-          <input
-            type="number"
-            name="requesterId"
-            value={formData.requesterId}
-            onChange={handleChange}
-            required
-            min="1"
-          />
+          <label>유형</label>
+          <div className="type-selector">
+            {types.map((type) => (
+              <button
+                key={type.value}
+                type="button"
+                className={formData.type === type.value ? 'active' : ''}
+                onClick={() => setFormData({ ...formData, type: type.value })}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="form-group">
-          <label>제목</label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-          />
-        </div>
+
         <div className="form-group">
           <label>내용</label>
           <textarea
-            name="content"
             value={formData.content}
-            onChange={handleChange}
+            onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+            placeholder="결재 내용을 입력하세요"
             required
-            rows="3"
           />
         </div>
+
         <div className="form-group">
-          <label>1단계 결재자 ID</label>
+          <label>결재자 ID</label>
           <input
             type="number"
-            name="approver1"
-            value={formData.approver1}
-            onChange={handleChange}
+            value={formData.steps[0].approverId}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                steps: [{ step: 1, approverId: parseInt(e.target.value) }],
+              })
+            }
+            placeholder="결재자 ID"
             required
-            min="1"
           />
         </div>
-        <div className="form-group">
-          <label>2단계 결재자 ID</label>
-          <input
-            type="number"
-            name="approver2"
-            value={formData.approver2}
-            onChange={handleChange}
-            required
-            min="1"
-          />
-        </div>
-        <button type="submit" className="btn btn-primary">
-          결재 요청 생성
+
+        <button type="submit" disabled={loading}>
+          {loading ? '처리 중...' : '요청하기'}
         </button>
       </form>
-    </section>
+    </div>
   );
 }
 

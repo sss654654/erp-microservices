@@ -1,0 +1,91 @@
+.approval-queue {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.approval-queue h2 {
+  margin: 0 0 24px 0;
+  font-size: 1.5em;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.approval-queue .empty {
+  text-align: center;
+  color: #999;
+  padding: 40px;
+  font-size: 0.95em;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.queue-item {
+  padding: 20px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.queue-item:hover {
+  border-color: #d0d0d0;
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.item-header .type {
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 1.05em;
+}
+
+.item-header .requester {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.queue-item .content {
+  color: #444;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.queue-item .actions {
+  display: flex;
+  gap: 10px;
+}
+
+.queue-item .actions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.queue-item .actions button:hover {
+  opacity: 0.9;
+}
+
+.queue-item .actions .approve {
+  background: #10b981;
+  color: white;
+}
+
+.queue-item .actions .reject {
+  background: #ef4444;
+  color: white;
+}

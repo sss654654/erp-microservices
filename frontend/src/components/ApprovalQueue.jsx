@@ -1,95 +1,80 @@
 import { useState, useEffect } from 'react';
-import { processingService } from '../services/processingService';
+import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
+import './ApprovalQueue.css';
 
 function ApprovalQueue({ approverId, refresh }) {
   const [queue, setQueue] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const loadQueue = async () => {
-    setLoading(true);
+  useEffect(() => {
+    fetchQueue();
+  }, [approverId, refresh]);
+
+  const fetchQueue = async () => {
     try {
-      const response = await processingService.getQueue(approverId);
-      setQueue(response.data);
-    } catch (error) {
-      console.error('Error loading queue:', error);
+      const res = await axios.get(`${API_ENDPOINTS.APPROVAL_PROCESSING}/${approverId}`);
+      setQueue(res.data);
+    } catch (err) {
+      console.error('대기 목록 조회 실패:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (approverId) {
-      loadQueue();
-    }
-  }, [approverId, refresh]);
-
-  const handleProcess = async (requestId, status) => {
-    if (!confirm(`정말 ${status === 'approved' ? '승인' : '반려'}하시겠습니까?`)) {
-      return;
-    }
-
+  const handleApprove = async (requestId) => {
     try {
-      await processingService.processApproval(approverId, requestId, status);
-      alert(`결재가 ${status === 'approved' ? '승인' : '반려'}되었습니다!`);
-      loadQueue();
-    } catch (error) {
-      alert('결재 처리 실패: ' + error.message);
+      await axios.post(`${API_ENDPOINTS.APPROVAL_PROCESSING}/${approverId}/${requestId}`, {
+        action: 'APPROVE',
+      });
+      alert('승인되었습니다');
+      fetchQueue();
+    } catch (err) {
+      alert(err.response?.data?.message || '승인 실패');
     }
   };
 
-  const getStatusText = (status) => {
-    const map = { pending: '대기중', approved: '승인', rejected: '반려' };
-    return map[status] || status;
+  const handleReject = async (requestId) => {
+    try {
+      await axios.post(`${API_ENDPOINTS.APPROVAL_PROCESSING}/${approverId}/${requestId}`, {
+        action: 'REJECT',
+      });
+      alert('반려되었습니다');
+      fetchQueue();
+    } catch (err) {
+      alert(err.response?.data?.message || '반려 실패');
+    }
   };
+
+  if (loading) return <div className="approval-queue"><p>로딩 중...</p></div>;
 
   return (
-    <section className="section">
-      <h2>⏳ 내 결재 대기 목록</h2>
-      <button onClick={loadQueue} className="btn btn-secondary">
-        새로고침
-      </button>
-      
-      {loading ? (
-        <div className="loading">로딩 중...</div>
-      ) : queue.length === 0 ? (
-        <div className="empty-state">대기 중인 결재가 없습니다</div>
+    <div className="approval-queue">
+      <h2>결재 대기 ({queue.length})</h2>
+      {queue.length === 0 ? (
+        <p className="empty">대기 중인 결재가 없습니다</p>
       ) : (
-        <div className="approval-list">
+        <div className="queue-list">
           {queue.map((item) => (
-            <div key={item.requestId} className="approval-card">
-              <div className="approval-header">
-                <span className="approval-title">{item.title}</span>
-                <span className="approval-id">ID: {item.requestId}</span>
+            <div key={item.requestId} className="queue-item">
+              <div className="item-header">
+                <span className="type">{item.title}</span>
+                <span className="requester">요청자 ID: {item.requesterId}</span>
               </div>
-              <div className="approval-content">{item.content}</div>
-              <div className="approval-steps">
-                {item.steps.map((step) => (
-                  <div key={step.step} className={`step step-${step.status}`}>
-                    {step.step}단계: {step.approverId}번 결재자
-                    <br />
-                    <strong>{getStatusText(step.status)}</strong>
-                  </div>
-                ))}
-              </div>
-              <div className="approval-actions">
-                <button
-                  className="btn btn-approve"
-                  onClick={() => handleProcess(item.requestId, 'approved')}
-                >
-                  ✓ 승인
+              <p className="content">{item.content}</p>
+              <div className="actions">
+                <button className="approve" onClick={() => handleApprove(item.requestId)}>
+                  승인
                 </button>
-                <button
-                  className="btn btn-reject"
-                  onClick={() => handleProcess(item.requestId, 'rejected')}
-                >
-                  ✗ 반려
+                <button className="reject" onClick={() => handleReject(item.requestId)}>
+                  반려
                 </button>
               </div>
             </div>
           ))}
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
