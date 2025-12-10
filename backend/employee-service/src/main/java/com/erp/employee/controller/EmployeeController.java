@@ -96,4 +96,26 @@ public class EmployeeController {
             "remainingLeave", employee.getAnnualLeaveBalance()
         ));
     }
+    
+    // 연차 차감 (결재 승인 시 호출)
+    @PostMapping("/{id}/deduct-leave")
+    public ResponseEntity<?> deductLeave(
+            @PathVariable Long id,
+            @RequestBody Map<String, Double> body) {
+        
+        Employee employee = employeeService.getEmployeeById(id);
+        Double days = body.get("days");
+        
+        if (employee.getAnnualLeaveBalance() < days) {
+            return ResponseEntity.badRequest().body(Map.of("error", "연차가 부족합니다"));
+        }
+        
+        employee.setAnnualLeaveBalance(employee.getAnnualLeaveBalance() - days);
+        employeeService.save(employee);
+        
+        return ResponseEntity.ok(Map.of(
+            "remainingLeave", employee.getAnnualLeaveBalance(),
+            "message", "연차 차감 완료"
+        ));
+    }
 }

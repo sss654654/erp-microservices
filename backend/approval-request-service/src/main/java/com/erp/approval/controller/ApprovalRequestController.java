@@ -35,6 +35,20 @@ public class ApprovalRequestController {
         return ResponseEntity.ok(service.getApprovalById(requestId));
     }
     
+    @PutMapping("/{requestId}/approve")
+    public ResponseEntity<?> approveRequest(@PathVariable Integer requestId, @RequestBody Map<String, Integer> body) {
+        Integer approverId = body.get("approverId");
+        service.approveRequest(requestId, approverId);
+        return ResponseEntity.ok(Map.of("message", "결재 승인 완료"));
+    }
+    
+    @PutMapping("/{requestId}/reject")
+    public ResponseEntity<?> rejectRequest(@PathVariable Integer requestId, @RequestBody Map<String, Integer> body) {
+        Integer approverId = body.get("approverId");
+        service.rejectRequest(requestId, approverId);
+        return ResponseEntity.ok(Map.of("message", "결재 반려 완료"));
+    }
+    
     @DeleteMapping
     public ResponseEntity<?> deleteAllApprovals() {
         service.deleteAll();

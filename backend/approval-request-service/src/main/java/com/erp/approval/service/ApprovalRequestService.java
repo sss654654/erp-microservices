@@ -66,6 +66,8 @@ public class ApprovalRequestService {
         approval.setRequesterId(request.getRequesterId());
         approval.setTitle(request.getTitle());
         approval.setContent(request.getContent());
+        approval.setType(request.getType());
+        approval.setLeaveDays(request.getLeaveDays());
         
         List<ApprovalRequest.ApprovalStep> steps = request.getSteps().stream()
                 .map(step -> {
@@ -179,5 +181,61 @@ public class ApprovalRequestService {
     
     public void deleteAll() {
         repository.deleteAll();
+    }
+    
+    public void approveRequest(Integer requestId, Integer approverId) {
+        ApprovalRequest approval = repository.findByRequestId(requestId)
+                .orElseThrow(() -> new ApprovalNotFoundException(requestId));
+        
+        // 현재 승인자의 단계 찾기
+        ApprovalRequest.ApprovalStep currentStep = approval.getSteps().stream()
+                .filter(s -> s.getApproverId().equals(approverId) && "pending".equals(s.getStatus()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("승인 권한이 없습니다"));
+        
+        currentStep.setStatus("approved");
+        currentStep.setUpdatedAt(LocalDateTime.now());
+        
+        // 다음 pending 단계 확인
+        boolean hasNextPending = approval.getSteps().stream()
+                .anyMatch(s -> "pending".equals(s.getStatus()));
+        
+        if (!hasNextPending) {
+            // 모든 단계 완료 - 연차 차감
+            approval.setFinalStatus("approved");
+            
+            if ("ANNUAL_LEAVE".equals(approval.getType()) && approval.getLeaveDays() != null) {
+                // Employee Service에 연차 차감 요청
+                try {
+                    String url = "http://employee-service.erp-dev.svc.cluster.local:8081/employees/" 
+                                + approval.getRequesterId() + "/deduct-leave";
+                    Map<String, Double> body = Map.of("days", approval.getLeaveDays());
+                    restTemplate.postForEntity(url, body, String.class);
+                } catch (Exception e) {
+                    System.err.println("연차 차감 실패: " + e.getMessage());
+                }
+            }
+        }
+        
+        approval.setUpdatedAt(LocalDateTime.now());
+        repository.save(approval);
+    }
+    
+    public void rejectRequest(Integer requestId, Integer approverId) {
+        ApprovalRequest approval = repository.findByRequestId(requestId)
+                .orElseThrow(() -> new ApprovalNotFoundException(requestId));
+        
+        // 현재 승인자의 단계 찾기
+        ApprovalRequest.ApprovalStep currentStep = approval.getSteps().stream()
+                .filter(s -> s.getApproverId().equals(approverId) && "pending".equals(s.getStatus()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("반려 권한이 없습니다"));
+        
+        currentStep.setStatus("rejected");
+        currentStep.setUpdatedAt(LocalDateTime.now());
+        
+        approval.setFinalStatus("rejected");
+        approval.setUpdatedAt(LocalDateTime.now());
+        repository.save(approval);
     }
 }

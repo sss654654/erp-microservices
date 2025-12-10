@@ -18,6 +18,8 @@ public class ApprovalRequest {
     private Integer requesterId;
     private String title;
     private String content;
+    private String type; // ANNUAL_LEAVE, EXPENSE, PROJECT
+    private Double leaveDays; // 연차 유형일 때 사용할 일수
     private List<ApprovalStep> steps;
     private String finalStatus; // in_progress, approved, rejected
     private LocalDateTime createdAt;
