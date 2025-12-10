@@ -23,7 +23,19 @@ public class SequenceGeneratorService {
                 new Update().inc("seq", 1),
                 options().returnNew(true).upsert(true),
                 DatabaseSequence.class);
-        return counter != null ? counter.getSeq() : 1;
+        
+        // upsert 시 seq가 null이면 1 반환 (첫 생성)
+        if (counter == null || counter.getSeq() == 0) {
+            // 명시적으로 1로 설정
+            mongoOperations.findAndModify(
+                    query(where("_id").is(seqName)),
+                    new Update().set("seq", 1),
+                    options().returnNew(true).upsert(true),
+                    DatabaseSequence.class);
+            return 1;
+        }
+        
+        return counter.getSeq();
     }
     
     public static class DatabaseSequence {

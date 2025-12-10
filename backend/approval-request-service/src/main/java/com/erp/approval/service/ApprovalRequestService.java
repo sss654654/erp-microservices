@@ -1,10 +1,11 @@
 package com.erp.approval.service;
 
 import com.erp.approval.document.ApprovalRequest;
+import com.erp.approval.dto.ApprovalRequestMessage;
 import com.erp.approval.dto.CreateApprovalRequest;
 import com.erp.approval.exception.ApprovalNotFoundException;
 import com.erp.approval.exception.InvalidStepsException;
-import com.erp.approval.grpc.ProcessingGrpcClient;
+import com.erp.approval.kafka.ApprovalRequestProducer;
 import com.erp.approval.repository.ApprovalRequestRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,7 @@ public class ApprovalRequestService {
     
     private final ApprovalRequestRepository repository;
     private final EmployeeClient employeeClient;
-    private final ProcessingGrpcClient processingGrpcClient;
+    private final ApprovalRequestProducer approvalRequestProducer;
     private final RestTemplate restTemplate;
     private final SequenceGeneratorService sequenceGenerator;
     
@@ -30,12 +31,12 @@ public class ApprovalRequestService {
     
     public ApprovalRequestService(ApprovalRequestRepository repository,
                                   EmployeeClient employeeClient,
-                                  ProcessingGrpcClient processingGrpcClient,
+                                  ApprovalRequestProducer approvalRequestProducer,
                                   RestTemplate restTemplate,
                                   SequenceGeneratorService sequenceGenerator) {
         this.repository = repository;
         this.employeeClient = employeeClient;
-        this.processingGrpcClient = processingGrpcClient;
+        this.approvalRequestProducer = approvalRequestProducer;
         this.restTemplate = restTemplate;
         this.sequenceGenerator = sequenceGenerator;
     }
@@ -82,14 +83,18 @@ public class ApprovalRequestService {
         
         ApprovalRequest saved = repository.save(approval);
         
-        // 4. gRPC로 Processing Service에 전달
-        processingGrpcClient.requestApproval(
-                saved.getRequestId(),
-                saved.getRequesterId(),
-                saved.getTitle(),
-                saved.getContent(),
-                saved.getSteps()
+        // 4. Kafka로 Processing Service에 전달
+        ApprovalRequestMessage message = new ApprovalRequestMessage(
+            saved.getRequestId(),
+            saved.getRequesterId(),
+            saved.getTitle(),
+            saved.getContent(),
+            saved.getSteps().stream()
+                .map(s -> new ApprovalRequestMessage.StepDto(s.getStep(), s.getApproverId(), s.getStatus()))
+                .collect(Collectors.toList()),
+            LocalDateTime.now()
         );
+        approvalRequestProducer.sendApprovalRequest(message);
         
         return saved;
     }
@@ -125,13 +130,17 @@ public class ApprovalRequestService {
             if (hasNextPending) {
                 // 다음 단계로 진행
                 repository.save(approval);
-                processingGrpcClient.requestApproval(
-                        approval.getRequestId(),
-                        approval.getRequesterId(),
-                        approval.getTitle(),
-                        approval.getContent(),
-                        approval.getSteps()
+                ApprovalRequestMessage message = new ApprovalRequestMessage(
+                    approval.getRequestId(),
+                    approval.getRequesterId(),
+                    approval.getTitle(),
+                    approval.getContent(),
+                    approval.getSteps().stream()
+                        .map(s -> new ApprovalRequestMessage.StepDto(s.getStep(), s.getApproverId(), s.getStatus()))
+                        .collect(Collectors.toList()),
+                    LocalDateTime.now()
                 );
+                approvalRequestProducer.sendApprovalRequest(message);
             } else {
                 // 모든 단계 완료
                 approval.setFinalStatus("approved");
