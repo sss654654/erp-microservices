@@ -10,7 +10,7 @@
 
 ---
 
-## 📋 목차
+##  목차
 
 1. [프로젝트 개요](#-프로젝트-개요)
 2. [아키텍처 설계](#-아키텍처-설계)
@@ -25,18 +25,18 @@
 
 ---
 
-## 🎯 프로젝트 개요
+##  프로젝트 개요
 
 ### 프로젝트 목표
 
 **마이크로서비스 아키텍처 기반 엔터프라이즈급 ERP 시스템 구축**
 
-- ✅ **확장 가능한 아키텍처**: 독립적으로 배포/확장 가능한 4개 마이크로서비스
-- ✅ **이종 데이터베이스 통합**: MySQL, MongoDB, Redis를 목적에 맞게 활용
-- ✅ **다양한 통신 프로토콜**: REST, gRPC, Kafka, WebSocket 구현
-- ✅ **완전 자동화된 CI/CD**: 코드 푸시부터 프로덕션 배포까지 자동화
-- ✅ **프로덕션 수준 인프라**: AWS 관리형 서비스 활용 (EKS, RDS, ElastiCache)
-- ✅ **보안 강화**: Private Subnet, Security Group, IAM Role, Cognito 인증
+-  **확장 가능한 아키텍처**: 독립적으로 배포/확장 가능한 4개 마이크로서비스
+-  **이종 데이터베이스 통합**: MySQL, MongoDB, Redis를 목적에 맞게 활용
+-  **다양한 통신 프로토콜**: REST, gRPC, Kafka, WebSocket 구현
+-  **완전 자동화된 CI/CD**: 코드 푸시부터 프로덕션 배포까지 자동화
+-  **프로덕션 수준 인프라**: AWS 관리형 서비스 활용 (EKS, RDS, ElastiCache)
+-  **보안 강화**: Private Subnet, Security Group, IAM Role, Cognito 인증
 
 ### 개발 기간 및 규모
 
@@ -48,20 +48,20 @@
 
 ### 프로젝트 단계
 
-#### **1단계: 로컬 개발 및 검증** ✅
+#### **1단계: 로컬 개발 및 검증** 
 - Docker Compose 기반 로컬 환경 구축
 - 4개 마이크로서비스 구현 (Employee, Approval Request, Approval Processing, Notification)
 - REST, gRPC, WebSocket 통신 구현
 - MySQL, MongoDB, In-Memory 데이터베이스 통합
 
-#### **2단계: AWS 클라우드 배포** ✅
+#### **2단계: AWS 클라우드 배포** 
 - Terraform으로 AWS 인프라 구축 (VPC, EKS, RDS, ElastiCache, API Gateway)
 - Kubernetes Manifest로 서비스 배포
 - CI/CD 파이프라인 구축 (CodePipeline + CodeBuild)
 - 프론트엔드 배포 (S3 + CloudFront)
 - 모니터링 설정 (CloudWatch, Container Insights)
 
-#### **3단계: Kafka 및 기능 확장** ✅
+#### **3단계: Kafka 및 기능 확장** 
 - gRPC 동기 통신 → Kafka 비동기 메시징 전환
 - 게이미피케이션 기능 추가 (출석 시스템, 퀘스트 시스템)
 - 연차 관리 시스템 구현 (신청, 승인, 자동 차감)
@@ -70,7 +70,7 @@
 
 ---
 
-## 🏗️ 아키텍처 설계
+##  아키텍처 설계
 
 ### 전체 시스템 아키텍처
 
@@ -193,7 +193,7 @@
 
 ---
 
-## 🛠️ 기술 스택
+##  기술 스택
 
 ### Backend
 
@@ -236,7 +236,7 @@
 
 ---
 
-## 🔧 인프라 구성
+##  인프라 구성
 
 ### Terraform 모듈 구조
 
@@ -396,7 +396,7 @@ resource "aws_eks_node_group" "main" {
 ---
 
 
-## 🔒 보안 설계
+##  보안 설계
 
 ### 네트워크 보안
 
@@ -441,7 +441,7 @@ resource "aws_eks_node_group" "main" {
 
 ---
 
-## 📦 Kubernetes 매니페스트 구조
+##  Kubernetes 매니페스트 구조
 
 ### 디렉토리 구조
 
@@ -477,21 +477,21 @@ manifests/
 
 ---
 
-## 🚀 주요 기능
+##  주요 기능
 
 ### 1단계: 기본 결재 시스템
 
-- ✅ 직원 관리 (CRUD)
-- ✅ 결재 요청 생성
-- ✅ 순차 결재 플로우 (다단계 승인)
-- ✅ 실시간 알림 (WebSocket)
+-  직원 관리 (CRUD)
+-  결재 요청 생성
+-  순차 결재 플로우 (다단계 승인)
+-  실시간 알림 (WebSocket)
 
 ### 2단계: AWS 클라우드 배포
 
-- ✅ Terraform 인프라 자동화
-- ✅ EKS 클러스터 배포
-- ✅ CI/CD 파이프라인 (CodePipeline + CodeBuild)
-- ✅ 프론트엔드 배포 (S3 + CloudFront)
+-  Terraform 인프라 자동화
+-  EKS 클러스터 배포
+-  CI/CD 파이프라인 (CodePipeline + CodeBuild)
+-  프론트엔드 배포 (S3 + CloudFront)
 
 ### 3단계: Kafka 및 기능 확장
 
@@ -520,7 +520,7 @@ manifests/
 
 ---
 
-## ⚡ 성능 최적화
+##  성능 최적화
 
 ### Kafka 도입 효과
 
@@ -539,7 +539,7 @@ manifests/
 
 ---
 
-## 🔄 배포 전략
+##  배포 전략
 
 ### CI/CD 파이프라인
 
@@ -567,7 +567,7 @@ strategy:
 
 ---
 
-## 📊 모니터링 및 로깅
+##  모니터링 및 로깅
 
 ### CloudWatch
 
@@ -593,7 +593,7 @@ kubectl top pods -n erp-dev
 
 ---
 
-## 📁 프로젝트 구조
+##  프로젝트 구조
 
 ```
 erp-project/
@@ -644,17 +644,17 @@ erp-project/
 
 ---
 
-## 🎓 학습 내용 및 성과
+##  학습 내용 및 성과
 
 ### 새로 배운 기술
 
-- ✅ **Terraform**: 30+ AWS 리소스 IaC 관리
-- ✅ **Kubernetes**: 50+ Manifest 작성, HPA, Rolling Update
-- ✅ **Kafka**: 비동기 메시징, Producer/Consumer 구현
-- ✅ **gRPC**: Proto 파일 작성, 서비스 간 RPC 통신
-- ✅ **MongoDB**: 문서형 DB, 복잡한 중첩 구조 설계
-- ✅ **AWS Cognito**: JWT 토큰 인증, API Gateway 통합
-- ✅ **CodePipeline**: GitHub 연동, 자동 배포
+-  **Terraform**: 30+ AWS 리소스 IaC 관리
+-  **Kubernetes**: 50+ Manifest 작성, HPA, Rolling Update
+-  **Kafka**: 비동기 메시징, Producer/Consumer 구현
+-  **gRPC**: Proto 파일 작성, 서비스 간 RPC 통신
+-  **MongoDB**: 문서형 DB, 복잡한 중첩 구조 설계
+-  **AWS Cognito**: JWT 토큰 인증, API Gateway 통합
+-  **CodePipeline**: GitHub 연동, 자동 배포
 
 ### 문제 해결 경험
 
@@ -672,7 +672,7 @@ erp-project/
 
 ---
 
-## 💰 비용 분석
+##  비용 분석
 
 ### 월 예상 비용: $191
 
@@ -690,14 +690,14 @@ erp-project/
 | 기타 (CloudWatch, ECR) | - | $8.5 |
 
 **비용 최적화 전략**:
-- ✅ t3.small 인스턴스 사용 (t3.medium 대비 50% 절감)
-- ✅ MongoDB Atlas Free Tier (M0)
-- ✅ HPA로 필요 시에만 스케일 업
-- ✅ Single-AZ RDS (Multi-AZ 대비 50% 절감)
+-  t3.small 인스턴스 사용 (t3.medium 대비 50% 절감)
+-  MongoDB Atlas Free Tier (M0)
+-  HPA로 필요 시에만 스케일 업
+-  Single-AZ RDS (Multi-AZ 대비 50% 절감)
 
 ---
 
-## 🚀 빠른 시작
+##  빠른 시작
 
 ### 사전 요구사항
 
@@ -762,7 +762,7 @@ aws s3 sync dist/ s3://erp-dev-frontend-dev --delete
 
 ---
 
-## 📞 연락처
+##  연락처
 
 **개발자**: 홍수빈  
 **이메일**: [your-email@example.com]  
@@ -771,13 +771,13 @@ aws s3 sync dist/ s3://erp-dev-frontend-dev --delete
 
 ---
 
-## 📄 라이선스
+##  라이선스
 
 MIT License
 
 ---
 
-## 🙏 감사의 말
+##  감사의 말
 
 이 프로젝트는 14일간의 집중 개발 끝에 완성되었습니다. AWS 클라우드, Kubernetes, 마이크로서비스 아키텍처에 대한 깊은 이해를 얻을 수 있었으며, 실무에서 바로 적용 가능한 기술들을 습득했습니다.
 
@@ -785,4 +785,4 @@ MIT License
 
 ---
 
-**⭐ 이 프로젝트가 도움이 되셨다면 Star를 눌러주세요!**
+** 이 프로젝트가 도움이 되셨다면 Star를 눌러주세요!**
