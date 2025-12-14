@@ -1,241 +1,197 @@
 # Approval Request Service
 
-결재 요청 생성 및 결재 단계 관리를 담당하는 서비스입니다.
+결재 요청 생성 및 관리를 담당하는 마이크로서비스
 
-## 역할
+## 책임
 
-- 결재 요청 생성, 조회
-- Employee Service 연동 (직원 검증)
-- Approval Processing Service 연동 (gRPC 양방향 통신)
-- 결재 상태 관리 (in_progress, approved, rejected)
+- 결재 요청 생성 (다단계 승인 플로우)
+- 결재 요청 조회 (전체, 요청자별, 결재자별)
+- Kafka Producer (approval-requests 토픽으로 메시지 발행)
+- Kafka Consumer (approval-results 토픽에서 결과 수신)
+- 결재 완료 시 Employee Service에 연차 차감 요청
 
 ## 기술 스택
 
-- **언어/프레임워크**: Java 17, Spring Boot 3.3.5
-- **데이터베이스**: MongoDB
-- **통신**: REST API, gRPC Client + gRPC Server
+- **Framework**: Spring Boot 3.3.5
+- **Database**: MongoDB Atlas (M0 Free Tier)
+- **Messaging**: Apache Kafka 3.6.0
+- **Port**: 8082
 
-## 아키텍처
+## 데이터베이스 스키마 (MongoDB)
 
-```
-[Client]
-   |
-   | POST /approvals
-   v
-[Approval Request Service]
-   |
-   | 1. REST: 직원 검증
-   v
-[Employee Service]
-   |
-   v
-[Approval Request Service]
-   |
-   | 2. MongoDB 저장 (PENDING)
-   | 3. gRPC: RequestApproval
-   v
-[Approval Processing Service]
-   |
-   | 4. 결재자가 승인/반려
-   | 5. gRPC: ReturnApprovalResult
-   v
-[Approval Request Service]
-   |
-   | 6. MongoDB 상태 업데이트
-   | 7. 다음 단계 or 완료 처리
-   v
-[Notification Service]
-```
-
-## MongoDB Document 구조
-
-```javascript
+### approval_requests Collection
+```json
 {
-  "_id": ObjectId("..."),
+  "_id": "ObjectId",
   "requestId": 1,
-  "requesterId": 1,
-  "title": "Expense Report",
-  "content": "Travel expenses",
+  "requesterId": 123,
+  "title": "연차 신청",
+  "content": "2025-12-20 ~ 2025-12-22 (3일)",
+  "type": "ANNUAL_LEAVE",
+  "leaveDays": 3.0,
   "steps": [
     {
       "step": 1,
-      "approverId": 3,
+      "approverId": 456,
       "status": "approved",
-      "updatedAt": "2025-01-01T11:23:11Z"
+      "updatedAt": "2025-12-14T10:00:00"
     },
     {
       "step": 2,
-      "approverId": 7,
-      "status": "pending"
+      "approverId": 789,
+      "status": "pending",
+      "updatedAt": null
     }
   ],
   "finalStatus": "in_progress",
-  "createdAt": "2025-01-01T10:23:11Z",
-  "updatedAt": "2025-01-01T11:23:11Z"
+  "createdAt": "2025-12-14T09:00:00",
+  "updatedAt": "2025-12-14T10:00:00"
 }
 ```
 
-**필드 설명**:
-- `requestId`: 자동 생성되는 결재 요청 ID
-- `requesterId`: 요청한 직원 ID
-- `steps`: 결재자 순서 및 단계별 상태
-- `finalStatus`: 최종 상태 (in_progress, approved, rejected)
+## 주요 API
 
-## REST API
+- `POST /approvals` - 결재 요청 생성
+- `GET /approvals` - 전체 결재 요청 조회
+- `GET /approvals/requester/{requesterId}` - 요청자별 조회
+- `GET /approvals/approver/{approverId}` - 결재자별 조회 (내가 결재할 건)
+- `GET /approvals/{requestId}` - 결재 요청 상세 조회
 
-### 1. POST /approvals
+## Kafka 통신
 
-결재 요청을 생성합니다.
+### Producer (approval-requests 토픽)
+```java
+@Component
+public class ApprovalRequestProducer {
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    
+    public void sendApprovalRequest(ApprovalRequestMessage message) {
+        String key = String.valueOf(message.getRequestId());
+        kafkaTemplate.send("approval-requests", key, message);
+    }
+}
+```
 
-**Request**:
+**메시지 구조**:
 ```json
 {
-  "requesterId": 1,
-  "title": "Expense Report",
-  "content": "Travel expenses",
+  "requestId": 1,
+  "requesterId": 123,
+  "title": "연차 신청",
+  "content": "2025-12-20 ~ 2025-12-22 (3일)",
   "steps": [
-    {"step": 1, "approverId": 3},
-    {"step": 2, "approverId": 7}
-  ]
+    {"step": 1, "approverId": 456, "status": "pending"},
+    {"step": 2, "approverId": 789, "status": "pending"}
+  ],
+  "timestamp": "2025-12-14T09:00:00"
 }
 ```
 
-**Response**:
+### Consumer (approval-results 토픽)
+```java
+@Component
+public class ApprovalResultConsumer {
+    @KafkaListener(topics = "approval-results", groupId = "approval-request-group")
+    public void consumeApprovalResult(ApprovalResultMessage message) {
+        requestService.handleApprovalResult(
+            message.getRequestId(),
+            message.getStep(),
+            message.getApproverId(),
+            message.getStatus()
+        );
+    }
+}
+```
+
+**메시지 구조**:
 ```json
 {
-  "requestId": 1
+  "requestId": 1,
+  "step": 1,
+  "approverId": 456,
+  "status": "approved",
+  "timestamp": "2025-12-14T10:00:00"
 }
 ```
 
-**처리 흐름**:
-1. Employee Service에서 requesterId, approverId 검증 (REST)
-2. steps가 1부터 오름차순인지 검증
-3. MongoDB에 저장 (모든 steps는 "pending" 상태)
-4. gRPC로 Approval Processing Service에 RequestApproval 호출
+## 핵심 로직
 
-### 2. GET /approvals
+### 결재 요청 생성 및 Kafka 발행
+```java
+public ApprovalRequest createApproval(CreateApprovalRequest request) {
+    // 1. 직원 검증 (Employee Service 호출)
+    employeeClient.validateEmployee(request.getRequesterId());
+    
+    // 2. MongoDB에 저장
+    ApprovalRequest approval = new ApprovalRequest();
+    approval.setRequestId(sequenceGenerator.generateSequence("approval_request_seq"));
+    approval.setRequesterId(request.getRequesterId());
+    approval.setTitle(request.getTitle());
+    approval.setSteps(request.getSteps());
+    approval.setFinalStatus("in_progress");
+    ApprovalRequest saved = repository.save(approval);
+    
+    // 3. Kafka로 Processing Service에 전달
+    ApprovalRequestMessage message = new ApprovalRequestMessage(saved);
+    approvalRequestProducer.sendApprovalRequest(message);
+    
+    return saved;
+}
+```
 
-모든 결재 요청 목록을 조회합니다.
+### 결재 결과 처리 및 연차 차감
+```java
+public void handleApprovalResult(Integer requestId, Integer step, Integer approverId, String status) {
+    ApprovalRequest approval = repository.findByRequestId(requestId).orElseThrow();
+    
+    // 해당 단계 상태 업데이트
+    approval.getSteps().stream()
+        .filter(s -> s.getStep().equals(step) && s.getApproverId().equals(approverId))
+        .findFirst()
+        .ifPresent(s -> {
+            s.setStatus(status);
+            s.setUpdatedAt(LocalDateTime.now());
+        });
+    
+    // 반려 시 최종 상태 업데이트
+    if ("rejected".equals(status)) {
+        approval.setFinalStatus("rejected");
+    }
+    // 모든 단계 승인 완료 시
+    else if (approval.getSteps().stream().allMatch(s -> "approved".equals(s.getStatus()))) {
+        approval.setFinalStatus("approved");
+        
+        // 연차 유형이면 Employee Service에 연차 차감 요청
+        if ("ANNUAL_LEAVE".equals(approval.getType())) {
+            restTemplate.postForEntity(
+                employeeServiceUrl + "/employees/" + approval.getRequesterId() + "/deduct-leave",
+                Map.of("days", approval.getLeaveDays()),
+                Map.class
+            );
+        }
+    }
+    
+    repository.save(approval);
+}
+```
 
-**Request**:
+## 로컬 실행
+
 ```bash
-GET http://localhost:8082/approvals
-```
+# MongoDB 실행 (Docker)
+docker run -d -p 27017:27017 mongo:7.0
 
-**Response**:
-```json
-[
-  {
-    "requestId": 1,
-    "requesterId": 1,
-    "title": "Expense Report",
-    "steps": [...],
-    "finalStatus": "in_progress"
-  }
-]
-```
+# Kafka 실행 (Docker Compose)
+docker-compose up -d kafka zookeeper
 
-### 3. GET /approvals/{requestId}
-
-특정 결재 요청을 조회합니다.
-
-**Request**:
-```bash
-GET http://localhost:8082/approvals/1
-```
-
-## gRPC 프로토콜
-
-### 1. RequestApproval (송신)
-
-Approval Processing Service에 결재 정보를 전달합니다.
-
-**Request**:
-```protobuf
-message ApprovalRequest {
-  int32 requestId = 1;
-  int32 requesterId = 2;
-  string title = 3;
-  string content = 4;
-  repeated Step steps = 5;
-}
-```
-
-**Response**:
-```protobuf
-message ApprovalResponse {
-  string status = 1; // "received"
-}
-```
-
-### 2. ReturnApprovalResult (수신)
-
-Approval Processing Service로부터 결재 결과를 받습니다.
-
-**Request**:
-```protobuf
-message ApprovalResultRequest {
-  int32 requestId = 1;
-  int32 step = 2;
-  int32 approverId = 3;
-  string status = 4; // "approved" or "rejected"
-}
-```
-
-**Response**:
-```protobuf
-message ApprovalResultResponse {
-  string status = 1; // "processed"
-}
-```
-
-**처리 흐름**:
-1. MongoDB에서 해당 requestId 찾기
-2. 해당 step의 status 업데이트 + updatedAt 추가
-3. **status가 "rejected"인 경우**:
-   - finalStatus를 "rejected"로 변경
-   - Notification Service 호출 (요청자에게 반려 알림)
-4. **status가 "approved"인 경우**:
-   - 다음 pending 단계가 있으면:
-     - RequestApproval 재호출 (다음 결재자에게 전달)
-   - 모든 단계가 완료되면:
-     - finalStatus를 "approved"로 변경
-     - Notification Service 호출 (요청자에게 승인 완료 알림)
-
-## 포트
-
-- REST API: 8082
-- gRPC Server: 9091
-
-## 실행 방법
-
-### 로컬 실행
-```bash
-cd approval-request-service
-mvn clean package
-java -jar target/approval-request-service-1.0.0.jar
-```
-
-### Docker 실행
-```bash
-docker build -t approval-request-service .
-docker run -p 8082:8082 -p 9091:9091 \
-  -e SPRING_DATA_MONGODB_HOST=mongodb \
-  approval-request-service
+# 애플리케이션 실행
+mvn spring-boot:run
 ```
 
 ## 환경 변수
 
 ```yaml
-SPRING_DATA_MONGODB_HOST: mongodb
-SPRING_DATA_MONGODB_PORT: 27017
-SPRING_DATA_MONGODB_DATABASE: erp
-GRPC_CLIENT_APPROVAL_PROCESSING_SERVICE_ADDRESS: static://localhost:9090
+SPRING_DATA_MONGODB_URI: mongodb://localhost:27017/erp
+KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+EMPLOYEE_SERVICE_URL: http://localhost:8081
 ```
-
-## 의존성
-
-- Employee Service (REST Client)
-- Approval Processing Service (gRPC Client + Server)
-- MongoDB
-- Notification Service (REST Client)

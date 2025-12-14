@@ -1,788 +1,589 @@
-# ERP 마이크로서비스 프로젝트
+# ERP 마이크로서비스 전자결재 시스템
 
-> **Enterprise Resource Planning System with Microservices Architecture**  
-> AWS 클라우드 기반 확장 가능한 전자결재 시스템
-
-[![AWS](https://img.shields.io/badge/AWS-EKS%20%7C%20RDS%20%7C%20ElastiCache-orange)](https://aws.amazon.com/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31-blue)](https://kubernetes.io/)
-[![Terraform](https://img.shields.io/badge/Terraform-IaC-purple)](https://www.terraform.io/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.5-green)](https://spring.io/projects/spring-boot)
+4개 독립 서비스 + 3가지 통신 프로토콜 + 이종 데이터베이스 통합
 
 ---
 
-##  목차
+## 이 프로젝트가 해결하려는 문제
 
-1. [프로젝트 개요](#-프로젝트-개요)
-2. [아키텍처 설계](#-아키텍처-설계)
-3. [기술 스택](#-기술-스택)
-4. [인프라 구성](#-인프라-구성)
-5. [보안 설계](#-보안-설계)
-6. [프로젝트 구조](#-프로젝트-구조)
-7. [주요 기능](#-주요-기능)
-8. [성능 최적화](#-성능-최적화)
-9. [배포 전략](#-배포-전략)
-10. [모니터링 및 로깅](#-모니터링-및-로깅)
+### CGV 프로젝트의 한계
+
+이전 CGV 대기열 시스템에서 **Kinesis + Redis를 활용한 대량 트래픽 처리**에는 성공했습니다. 1차원적으로 "많은 요청을 빠르게 처리한다"는 목표는 달성했지만, 고차원적으로 생각했을 때 **단일 API 서버 구조**였습니다.
+
+**CGV 프로젝트 구조:**
+```
+대량 트래픽 → ALB → 단일 API 서버 → Kinesis → Redis → RDS Aurora
+```
+- Kinesis로 요청 버퍼링
+- Redis로 대기열 관리
+- 대량 트래픽 처리 성공
+
+**하지만 마이크로서비스가 아니었던 이유:**
+- 모든 기능이 하나의 서버에 집중 (대기열, 예매, 결제 등)
+- 서비스 간 통신 개념 부재
+- 하나의 기능 장애 시 전체 시스템 영향
+- 독립적인 확장 불가능
+
+이 경험을 통해 **"대량 트래픽 처리"와 "마이크로서비스 아키텍처"는 다른 문제**임을 깨달았고, 실무에서 더 자주 마주치는 **마이크로서비스 환경의 문제**를 경험하고 싶어 이번 프로젝트를 시작했습니다.
+
+**경험하지 못한 실무 상황:**
+- 서비스 간 통신이 느려지면 전체 시스템이 느려지는 문제
+- 한 서비스 장애가 다른 서비스로 전파되는 문제
+- 서비스마다 다른 데이터 특성에 맞는 DB 선택
+- 여러 서비스를 하나의 API로 통합 관리
+- CI/CD 파이프라인 직접 설계 (CGV에서는 GitLab CI/CD 코드를 받아서 백엔드용으로 리팩토링만 함)
+
+### 이 프로젝트에서 해결하려는 것
+
+**"마이크로서비스에서 발생하는 실제 문제를 직접 겪고, 해결책을 찾는다"**
+
+1. **동기 통신의 블로킹 문제**: gRPC로 구현 → 문제 발견 → Kafka로 전환
+2. **서비스별 최적 DB 선택**: 데이터 특성 분석 → MySQL/MongoDB/Redis 적재적소 배치
+3. **마이크로서비스 통합 관리**: 4개 서비스를 API Gateway로 단일 진입점 구성
+4. **CI/CD 파이프라인 직접 설계**: DVA 학습 후 CodePipeline으로 GitHub → ECR → EKS 자동 배포 구축
+5. **인프라 형상 관리**: Terraform으로 전체 인프라 코드화, 실무 구조 반영
 
 ---
 
-##  프로젝트 개요
+## 아키텍처
 
-### 프로젝트 목표
-
-**마이크로서비스 아키텍처 기반 엔터프라이즈급 ERP 시스템 구축**
-
--  **확장 가능한 아키텍처**: 독립적으로 배포/확장 가능한 4개 마이크로서비스
--  **이종 데이터베이스 통합**: MySQL, MongoDB, Redis를 목적에 맞게 활용
--  **다양한 통신 프로토콜**: REST, gRPC, Kafka, WebSocket 구현
--  **완전 자동화된 CI/CD**: 코드 푸시부터 프로덕션 배포까지 자동화
--  **프로덕션 수준 인프라**: AWS 관리형 서비스 활용 (EKS, RDS, ElastiCache)
--  **보안 강화**: Private Subnet, Security Group, IAM Role, Cognito 인증
-
-### 개발 기간 및 규모
-
-- **개발 기간**: 14일 (2025.11.27 ~ 2025.12.10)
-- **개발 인원**: 1명 (풀스택 + DevOps)
-- **코드 라인**: 약 15,000 LOC
-- **인프라 리소스**: 30+ AWS 리소스 (Terraform으로 관리)
-- **Kubernetes 리소스**: 50+ Manifest 파일
-
-### 프로젝트 단계
-
-#### **1단계: 로컬 개발 및 검증** 
-- Docker Compose 기반 로컬 환경 구축
-- 4개 마이크로서비스 구현 (Employee, Approval Request, Approval Processing, Notification)
-- REST, gRPC, WebSocket 통신 구현
-- MySQL, MongoDB, In-Memory 데이터베이스 통합
-
-#### **2단계: AWS 클라우드 배포** 
-- Terraform으로 AWS 인프라 구축 (VPC, EKS, RDS, ElastiCache, API Gateway)
-- Kubernetes Manifest로 서비스 배포
-- CI/CD 파이프라인 구축 (CodePipeline + CodeBuild)
-- 프론트엔드 배포 (S3 + CloudFront)
-- 모니터링 설정 (CloudWatch, Container Insights)
-
-#### **3단계: Kafka 및 기능 확장** 
-- gRPC 동기 통신 → Kafka 비동기 메시징 전환
-- 게이미피케이션 기능 추가 (출석 시스템, 퀘스트 시스템)
-- 연차 관리 시스템 구현 (신청, 승인, 자동 차감)
-- AWS Cognito 기반 인증/인가 구현
-- 성능 최적화 (응답시간 85% 개선, 처리량 8배 증가)
-
----
-
-##  아키텍처 설계
-
-### 전체 시스템 아키텍처
+### 전체 시스템 구조
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          사용자 (브라우저)                            │
-│                  https://d95pjcr73gr6g.cloudfront.net                │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ HTTPS
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      CloudFront (CDN)                                │
-│                   - Global Edge Locations                            │
-│                   - HTTPS 강제, Gzip 압축                            │
-│                   - S3 Origin (정적 파일)                            │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ Origin Request
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    S3 Bucket (Frontend)                              │
-│                   - Static Website Hosting                           │
-│                   - React SPA (Vite 빌드)                            │
-└─────────────────────────────────────────────────────────────────────┘
-                             │ API 호출
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              API Gateway (HTTP API)                                  │
-│       https://mqi4qaw3bb.execute-api.ap-northeast-2...               │
-│                   - Cognito Authorizer (JWT 검증)                    │
-│                   - CORS 설정 (AllowOrigins: *)                     │
-│                   - VPC Link (Private 통신)                          │
-│                   - 경로 재작성 (/api/* → /*)                        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ VPC Link (Private)
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              Network Load Balancer (Layer 4)                         │
-│                   - Cross-Zone Load Balancing                        │
-│                   - 4개 Target Group (각 서비스별)                   │
-│                   - Health Check (HTTP /actuator/health)             │
-└────┬──────────┬──────────┬──────────┬─────────────────────────────┘
-     │          │          │          │
-┌────▼───┐ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐
-│Employee│ │Approval│ │Approval│ │Notifi- │
-│Service │ │Request │ │Process │ │cation  │
-│:8081   │ │:8082   │ │:8083   │ │:8084   │
-│2 Pods  │ │2 Pods  │ │2 Pods  │ │2 Pods  │
-│HPA     │ │HPA     │ │HPA     │ │HPA     │
-└────┬───┘ └───┬────┘ └───┬────┘ └───┬────┘
-     │         │          │          │
-     │         │    ┌─────▼──────┐   │
-     │         │    │   Kafka    │   │
-     │         │    │  Cluster   │   │
-     │         │    │  (EKS Pod) │   │
-     │         │    └────────────┘   │
-     │         │          │          │
-┌────▼─────────▼──────────▼──────────▼────┐
-│         Amazon EKS Cluster (v1.31)       │
-│          - Worker Nodes: t3.small × 3    │
-│          - AZ: ap-northeast-2a, 2c       │
-│          - Auto Scaling: 1~3 nodes       │
-│          - Container Insights 활성화     │
-└────┬──────────┬──────────┬──────────┬───┘
-     │          │          │          │
-┌────▼───┐ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐
-│  RDS   │ │MongoDB │ │ Redis  │ │Cognito │
-│ MySQL  │ │ Atlas  │ │ElastiC │ │User    │
-│db.t3   │ │ M0     │ │cache   │ │Pool    │
-│.micro  │ │ Free   │ │t3.micro│ │        │
-└────────┘ └────────┘ └────────┘ └────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   CloudFront (Frontend)                      │
+│              https://d95pjcr73gr6g.cloudfront.net            │
+└────────────────────┬────────────────────────────────────────┘
+                     │ HTTPS
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    S3 Bucket (React SPA)                     │
+│                   - Static Website Hosting                   │
+└─────────────────────────────────────────────────────────────┘
+                     │ API 호출
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              API Gateway (HTTP API)                          │
+│       https://mqi4qaw3bb.execute-api.ap-northeast-2...       │
+│                   - Cognito Authorizer (JWT 검증)            │
+│                   - CORS 중앙 관리                           │
+│                   - VPC Link (Private 통신)                  │
+└────────────────────┬────────────────────────────────────────┘
+                     │ VPC Link
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Network Load Balancer (Layer 4)                 │
+│                   - Cross-Zone Load Balancing                │
+│                   - 4개 Target Group                         │
+└────┬──────┬──────┬──────┬──────────────────────────────────┘
+     │      │      │      │
+┌────▼┐ ┌──▼──┐ ┌─▼──┐ ┌─▼──┐
+│Empl-│ │Appr-│ │Appr-│ │Noti-│
+│oyee │ │oval │ │oval │ │fica-│
+│     │ │Req  │ │Proc │ │tion │
+│8081 │ │8082 │ │8083 │ │8084 │
+│2Pod │ │2Pod │ │2Pod │ │2Pod │
+└──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘
+   │       │       │       │
+   │       └───┬───┘       │
+   │           │           │
+   │      ┌────▼────┐      │
+   │      │  Kafka  │      │
+   │      │ Cluster │      │
+   │      │ (EKS)   │      │
+   │      └─────────┘      │
+   │                       │
+┌──▼───────────────────────▼──┐
+│     MySQL (RDS)             │
+│  - employees                │
+│  - leave_balance            │
+│  - leave_request            │
+│  - attendance               │
+│  - quest                    │
+└─────────────────────────────┘
 ```
 
-### 마이크로서비스 아키텍처 설계 철학
-
-#### 1. **서비스 분리 원칙 (Single Responsibility)**
-
-각 서비스는 명확한 단일 책임을 가지며, 독립적으로 배포/확장 가능합니다.
-
-| 서비스 | 책임 | 데이터베이스 | 포트 |
-|--------|------|--------------|------|
-| **Employee Service** | 직원 정보 관리 (CRUD) | MySQL (RDS) | 8081 |
-| **Approval Request Service** | 결재 요청 생성 및 조회 | MongoDB Atlas | 8082 |
-| **Approval Processing Service** | 결재 처리 로직 (승인/반려) | Redis (ElastiCache) | 8083 |
-| **Notification Service** | 실시간 알림 전송 | Redis (ElastiCache) | 8084 |
-
-#### 2. **통신 프로토콜 선택 전략**
-
-**REST API (외부 통신)**
-- 클라이언트 ↔ 서비스 간 통신
-- 표준 HTTP 메서드 (GET, POST, PUT, DELETE)
-- JSON 기반 데이터 교환
-
-**Kafka (비동기 메시징)**
-- Approval Request ↔ Approval Processing 간 통신
-- 이벤트 기반 아키텍처
-- 장애 격리 및 재시도 메커니즘
-- **성능 개선**: 응답시간 850ms → 120ms (85% 개선)
-
-**WebSocket (실시간 통신)**
-- 서버 → 클라이언트 실시간 알림
-- SockJS + STOMP 프로토콜
-- 결재 승인/반려 시 즉시 알림
-
-#### 3. **데이터베이스 선택 전략**
-
-**MySQL (RDS)**
-- **용도**: 직원 정보, 연차 관리, 출석 기록
-- **선택 이유**: ACID 트랜잭션, 관계형 데이터 모델
-- **설정**: db.t3.micro, Multi-AZ 비활성화 (개발 환경)
-
-**MongoDB Atlas**
-- **용도**: 결재 요청 문서 저장
-- **선택 이유**: 유연한 스키마, 복잡한 중첩 구조 (결재 단계)
-- **설정**: M0 Free Tier, ap-northeast-2 리전
-
-**Redis (ElastiCache)**
-- **용도**: 결재 처리 상태, 세션 캐시
-- **선택 이유**: 빠른 읽기/쓰기, TTL 지원
-- **설정**: cache.t3.micro, 단일 노드 (개발 환경)
-
----
-
-##  기술 스택
-
-### Backend
-
-| 계층 | 기술 | 버전 | 선택 이유 |
-|------|------|------|-----------|
-| **Framework** | Spring Boot | 3.3.5 | 엔터프라이즈급 안정성, 풍부한 생태계 |
-| **Language** | Java | 17 | LTS 버전, 최신 기능 (Record, Pattern Matching) |
-| **Build Tool** | Maven | 3.9.5 | 의존성 관리, 멀티 모듈 프로젝트 지원 |
-| **Database** | MySQL | 8.0 | ACID 트랜잭션, 관계형 데이터 |
-| | MongoDB | 7.0 | 문서형 DB, 유연한 스키마 |
-| | Redis | 7.0 | 인메모리 캐시, 빠른 성능 |
-| **Messaging** | Apache Kafka | 3.6.0 | 비동기 이벤트 처리, 고성능 |
-| **Communication** | gRPC | 1.58.0 | 고성능 RPC (2단계에서 사용) |
-| | WebSocket | - | 실시간 양방향 통신 |
-| **Authentication** | AWS Cognito | - | JWT 토큰 자동 발급, API Gateway 통합 |
-
-### Frontend
-
-| 계층 | 기술 | 버전 | 선택 이유 |
-|------|------|------|-----------|
-| **Framework** | React | 18.2 | 컴포넌트 기반, Virtual DOM |
-| **Build Tool** | Vite | 5.0 | 빠른 HMR, 최적화된 번들링 |
-| **State Management** | React Hooks | - | 간단한 상태 관리 |
-| **HTTP Client** | Axios | 1.6 | Promise 기반, 인터셉터 지원 |
-| **WebSocket** | SockJS + STOMP | - | 실시간 알림 수신 |
-
-### Infrastructure
-
-| 계층 | 기술 | 버전 | 선택 이유 |
-|------|------|------|-----------|
-| **IaC** | Terraform | 1.6.0 | 선언적 인프라 관리, 상태 관리 |
-| **Container Orchestration** | Kubernetes (EKS) | 1.31 | 자동 스케일링, Self-Healing |
-| **Container Runtime** | Docker | 24.0 | 표준 컨테이너 런타임 |
-| **CI/CD** | AWS CodePipeline | - | GitHub 연동, 자동 배포 |
-| | AWS CodeBuild | - | Docker 이미지 빌드 |
-| **Load Balancer** | Network Load Balancer | - | Layer 4, 낮은 지연시간 |
-| **API Gateway** | AWS API Gateway (HTTP) | - | CORS, 인증, 경로 관리 |
-| **CDN** | CloudFront | - | 글로벌 엣지 캐싱 |
-| **Monitoring** | CloudWatch | - | 로그, 메트릭, 알람 |
-
----
-
-##  인프라 구성
-
-### Terraform 모듈 구조
-
-**9개의 독립적인 Terraform 모듈로 인프라를 관리합니다.**
+### VPC 네트워크 설계
 
 ```
-infrastructure/terraform/dev/
-├── erp-dev-VPC/                    # 네트워크 기반
-│   ├── vpc/                        # VPC 생성 (10.0.0.0/16)
-│   ├── subnet/                     # 6개 서브넷 (Public 2, Private 4)
-│   └── route-table/                # 라우팅 테이블, NAT Gateway
-│
-├── erp-dev-SecurityGroups/         # 보안 그룹
-│   ├── alb-sg/                     # ALB 보안 그룹 (80, 443)
-│   ├── eks-sg/                     # EKS 클러스터 보안 그룹
-│   ├── rds-sg/                     # RDS 보안 그룹 (3306)
-│   └── elasticache-sg/             # ElastiCache 보안 그룹 (6379)
-│
-├── erp-dev-IAM/                    # IAM 역할 및 정책
-│   ├── eks-cluster-role/           # EKS 클러스터 역할
-│   ├── eks-node-role/              # EKS 노드 역할
-│   ├── codebuild-role/             # CodeBuild 역할
-│   └── codepipeline-role/          # CodePipeline 역할
-│
-├── erp-dev-Secrets/                # 시크릿 관리
-│   ├── mysql-secret/               # RDS 자격증명
-│   └── eks-node-secrets-policy/    # Secrets Manager 접근 정책
-│
-├── erp-dev-Databases/              # 데이터베이스
-│   ├── rds/                        # MySQL RDS (db.t3.micro)
-│   └── elasticache/                # Redis ElastiCache (cache.t3.micro)
-│
-├── erp-dev-EKS/                    # Kubernetes 클러스터
-│   ├── eks-cluster/                # EKS 클러스터 (v1.31)
-│   ├── eks-node-group/             # 노드 그룹 (t3.small, 1~3 노드)
-│   └── eks-cluster-sg-rules/       # 클러스터 보안 그룹 규칙
-│
-├── erp-dev-LoadBalancerController/ # AWS Load Balancer Controller
-│   └── load-balancer-controller.tf # Helm Chart 배포
-│
-├── erp-dev-APIGateway/             # API Gateway 및 NLB
-│   ├── nlb/                        # Network Load Balancer
-│   └── api-gateway/                # HTTP API Gateway
-│
-├── erp-dev-Frontend/               # 프론트엔드 배포
-│   ├── s3/                         # S3 버킷 (정적 호스팅)
-│   └── cloudfront/                 # CloudFront 배포
-│
-└── erp-dev-Cognito/                # 인증/인가
-    ├── user-pool/                  # Cognito User Pool
-    └── identity-pool/              # Cognito Identity Pool
-```
-
-### 인프라 배포 순서
-
-**의존성을 고려한 순차적 배포가 필요합니다.**
-
-```bash
-# 1. VPC 및 네트워크 (기반 인프라)
-cd erp-dev-VPC && terraform init && terraform apply -auto-approve
-
-# 2. 보안 그룹 (VPC 의존)
-cd ../erp-dev-SecurityGroups && terraform init && terraform apply -auto-approve
-
-# 3. IAM 역할 (독립적)
-cd ../erp-dev-IAM && terraform init && terraform apply -auto-approve
-
-# 4. Secrets Manager (독립적)
-cd ../erp-dev-Secrets && terraform init && terraform apply -auto-approve
-
-# 5. 데이터베이스 (VPC, SecurityGroup 의존)
-cd ../erp-dev-Databases && terraform init && terraform apply -auto-approve
-
-# 6. EKS 클러스터 (VPC, IAM, SecurityGroup 의존)
-cd ../erp-dev-EKS && terraform init && terraform apply -auto-approve
-
-# 7. Load Balancer Controller (EKS 의존)
-cd ../erp-dev-LoadBalancerController && terraform init && terraform apply -auto-approve
-
-# 8. API Gateway 및 NLB (EKS 의존)
-cd ../erp-dev-APIGateway && terraform init && terraform apply -auto-approve
-
-# 9. 프론트엔드 (독립적)
-cd ../erp-dev-Frontend && terraform init && terraform apply -auto-approve
-
-# 10. Cognito (독립적)
-cd ../erp-dev-Cognito && terraform init && terraform apply -auto-approve
-```
-
-### 주요 인프라 리소스
-
-#### VPC 설계
-
-```
-VPC: 10.0.0.0/16 (65,536 IP)
-├── Public Subnet 1:  10.0.1.0/24 (ap-northeast-2a) - NAT Gateway, ALB
-├── Public Subnet 2:  10.0.2.0/24 (ap-northeast-2c) - NAT Gateway, ALB
+VPC: 10.0.0.0/16
+├── Public Subnet 1:  10.0.0.0/24 (ap-northeast-2a) - NAT Gateway
+├── Public Subnet 2:  10.0.1.0/24 (ap-northeast-2c)
 ├── Private Subnet 1: 10.0.10.0/24 (ap-northeast-2a) - EKS Nodes
 ├── Private Subnet 2: 10.0.11.0/24 (ap-northeast-2c) - EKS Nodes
-├── Private Subnet 3: 10.0.20.0/24 (ap-northeast-2a) - RDS, ElastiCache
-└── Private Subnet 4: 10.0.21.0/24 (ap-northeast-2c) - RDS, ElastiCache
+├── Data Subnet 1:    10.0.20.0/24 (ap-northeast-2a) - RDS, Redis
+└── Data Subnet 2:    10.0.21.0/24 (ap-northeast-2c) - RDS, Redis
 ```
 
-**설계 원칙**:
-- **Multi-AZ**: 고가용성을 위해 2개 가용 영역 사용
-- **Public/Private 분리**: 보안을 위해 데이터베이스는 Private Subnet에 배치
-- **NAT Gateway**: Private Subnet에서 인터넷 접근 (패키지 다운로드 등)
+**설계 원칙:**
+- Multi-AZ: 2개 가용 영역 (고가용성)
+- Public/Private 분리: 데이터베이스는 Private Subnet
+- NAT Gateway: 1개만 배치 (비용 절감, Public Subnet 1에 위치)
 
-#### EKS 클러스터 설정
+### 기술 스택
 
-```hcl
-# eks-cluster/eks-cluster.tf
-resource "aws_eks_cluster" "main" {
-  name     = "erp-dev"
-  version  = "1.31"
-  role_arn = var.cluster_role_arn
+| 계층 | 기술 | 버전 | 선택 이유 |
+|------|------|------|-----------|
+| **Backend** | Spring Boot | 3.3.5 | 엔터프라이즈급 안정성 |
+| | Java | 17 | LTS 버전, 최신 기능 |
+| **Database** | MySQL | 8.0 | ACID 트랜잭션 |
+| | MongoDB | 7.0 | 문서형 DB, 유연한 스키마 |
+| | Redis | 7.0 | 인메모리 캐시 |
+| **Messaging** | Apache Kafka | 3.6.0 | 비동기 이벤트 처리 |
+| **Frontend** | React | 18.2 | 컴포넌트 기반 |
+| | Vite | 5.0 | 빠른 HMR |
+| **Infrastructure** | Terraform | 1.6.0 | IaC |
+| | Kubernetes (EKS) | 1.31 | 컨테이너 오케스트레이션 |
+| | Docker | 24.0 | 컨테이너 런타임 |
+| **CI/CD** | CodePipeline | - | GitHub 연동 |
+| | CodeBuild | - | Docker 빌드 |
+| **AWS** | API Gateway | - | 마이크로서비스 통합 |
+| | NLB | - | Layer 4 로드밸런싱 |
+| | CloudFront | - | CDN |
+| | Cognito | - | 인증/인가 |
 
-  vpc_config {
-    subnet_ids              = var.private_subnet_ids
-    endpoint_private_access = true
-    endpoint_public_access  = true
-    security_group_ids      = [var.cluster_security_group_id]
-  }
+---
 
-  enabled_cluster_log_types = ["api", "audit", "authenticator"]
+## 문제 해결 과정
+
+### 1. 동기 통신의 한계 경험
+
+**2단계: gRPC로 구현했을 때**
+
+```
+Approval Request Service
+  ↓ gRPC 동기 호출
+  ↓ 응답 대기... (850ms)
+Approval Processing Service
+```
+
+**측정 결과:**
+- 평균 응답 시간: 850ms
+- 에러율: 5% (타임아웃)
+- 처리량: 35 req/sec
+- **문제**: Processing Service 다운 시 Request Service도 실패
+
+**왜 이런 문제가 발생했는가?**
+- Request Service가 Processing Service의 응답을 기다리는 동안 스레드 블로킹
+- 네트워크 지연, 처리 시간이 누적되어 전체 응답 시간 증가
+- 한 서비스의 장애가 호출하는 서비스로 전파
+
+### 2. Kafka 비동기 메시징으로 전환
+
+**3단계: 문제 해결**
+
+```
+Approval Request Service
+  ↓ Kafka Produce (비동기, 즉시 반환)
+Kafka Topic
+  ↓ Consumer Group (병렬 처리)
+Approval Processing Service
+```
+
+**개선 결과:**
+- 평균 응답 시간: 120ms (약 85% 감소, 850ms → 120ms)
+- 에러율: 0% (완전 제거)
+- 처리량: 250 req/sec (약 610% 증가, 35 → 250 req/sec)
+- **해결**: Processing Service 다운되어도 메시지는 Kafka에 보존, 복구 후 자동 처리
+
+**배운 점:**
+- 동기 통신은 간단하지만 확장성과 안정성에 한계
+- 비동기 메시징은 복잡도가 높지만 장애 격리와 성능 개선 효과 큼
+- 실무에서 마이크로서비스는 비동기 통신이 필수
+
+**Kinesis vs Kafka 선택:**
+
+CGV 프로젝트에서는 Kinesis를 사용했지만, 이번에는 Kafka를 선택했습니다.
+
+| 항목 | Kinesis (CGV) | Kafka (ERP) |
+|------|---------------|-------------|
+| 사용 패턴 | 단일 서비스 내 대기열 처리 | 서비스 간 메시징 |
+| 구조 | API 서버 → Kinesis → 동일 서버 처리 | Request Service → Kafka → Processing Service |
+| Consumer | 단일 Consumer | Consumer Group (병렬) |
+| 목적 | 대량 트래픽 버퍼링 | 서비스 간 비동기 통신 |
+
+**핵심 차이:**
+- CGV: Kinesis가 하나의 서비스 내에서 메시지를 저장하고 순차 처리하는 버퍼 역할
+- ERP: Kafka가 독립된 서비스 간 메시지를 전달하는 메시징 역할 (마이크로서비스 특징 활용)
+
+**Kafka 직접 설치 선택:**
+- AWS MSK: 월 $300+ (관리형 서비스)
+- Kafka on EKS: 추가 비용 없음 (기존 EKS 노드 활용)
+- 제한된 예산($180)으로 Helm Chart 사용하여 EKS에 직접 배포
+
+### 3. 데이터 특성에 맞는 DB 선택
+
+**고민: 왜 모든 서비스가 MySQL을 쓰면 안 되는가?**
+
+**결재 요청 데이터 구조 분석:**
+```json
+{
+  "requestId": 1,
+  "steps": [
+    {"step": 1, "approverId": 5, "status": "approved"},
+    {"step": 2, "approverId": 6, "status": "pending"}
+  ]
 }
-
-# eks-node-group/eks-node-group.tf
-resource "aws_eks_node_group" "main" {
-  cluster_name    = var.cluster_name
-  node_group_name = "erp-dev-node-group"
-  node_role_arn   = var.node_role_arn
-  subnet_ids      = var.private_subnet_ids
-
-  scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
-  }
-
-  instance_types = ["t3.small"]
-  capacity_type  = "ON_DEMAND"
-
-  labels = {
-    Environment = "dev"
-    Project     = "erp"
-  }
-}
 ```
 
-**주요 설정**:
-- **버전**: Kubernetes 1.31 (최신 안정 버전)
-- **노드 타입**: t3.small (2 vCPU, 2GB RAM)
-- **Auto Scaling**: 1~3 노드 (비용 최적화)
-- **로깅**: API, Audit, Authenticator 로그 활성화
+- 결재 단계 수가 가변적 (1단계 ~ N단계)
+- 향후 결재 타입별로 다른 필드 추가 가능 (출장 신청 → destination, budget)
+- 문서 단위로 조회하는 경우가 대부분
+
+**MySQL로 구현 시:**
+- approval_requests 테이블 + approval_steps 테이블 (2개 필요)
+- JOIN 필수, 쿼리 복잡도 증가
+- 스키마 변경 시 마이그레이션 필요
+
+**MongoDB 선택 이유:**
+- 중첩 문서로 1번 쿼리로 전체 데이터 조회
+- 스키마 유연성으로 타입별 필드 추가 용이
+- 문서 단위 조회 최적화
+
+**결과:**
+- Employee Service: MySQL (직원 정보는 구조 고정, ACID 트랜잭션 필요)
+- Approval Request: MongoDB (결재 요청은 구조 유동적, 스키마 유연성 필요)
+- Notification: Redis (알림은 임시 데이터, 빠른 조회 필요)
+
+**배운 점:**
+- 모든 데이터를 하나의 DB에 넣는 것이 아니라, 데이터 특성 분석 후 적합한 DB 선택
+- Database per Service 패턴으로 각 서비스가 독립적으로 확장 가능
+
+### 4. API Gateway vs ALB 선택
+
+**CGV 프로젝트: ALB 선택**
+- 단일 API 서버
+- 대량 트래픽 집중 처리
+- Layer 7 로드밸런싱만 필요
+
+**ERP 프로젝트: API Gateway 선택**
+- 4개 마이크로서비스
+- 각 서비스마다 다른 경로 (/employees, /approvals, /process, /notifications)
+- CORS 설정을 각 서비스마다 하면 중복 관리
+
+**API Gateway 선택 이유:**
+1. 마이크로서비스 단일 진입점
+2. CORS 중앙 관리 (각 서비스마다 설정 불필요)
+3. Cognito 통합으로 JWT 토큰 검증 자동화
+4. 경로 재작성 (`/api/employees` → `/employees`)
+
+**배운 점:**
+- 아키텍처에 따라 적합한 도구가 다름
+- 단일 API는 ALB, 마이크로서비스는 API Gateway
+
+### 5. Terraform 구조 설계
+
+**멘토 조언:**
+> "실무에서는 보안그룹이나 RDS를 Terraform으로 관리하면 정책 1개만 달라져도 틀어져서 여러 부서가 함께하는 프로젝트에는 부적합. 폴더는 세분화하고 각 tfstate 파일을 따로 저장하는게, 콘솔 작업 후 형상 맞춰주기 좋음."
+
+**하지만 개인 프로젝트 특성상:**
+- 1인 개발이므로 협업 충돌 없음
+- 학습 목적으로 전체 인프라를 Terraform으로 구축
+- 현업 전환 시: VPC, Subnet, Route Table, ECR, DB Subnet까지만 Terraform, 나머지는 콘솔 관리
+
+**고민: 세분화 vs 통합**
+
+**SecurityGroups: 세분화 선택**
+```
+erp-dev-SecurityGroups/
+├── eks-cluster-sg/     # tfstate 1
+├── eks-node-sg/        # tfstate 2
+├── rds-sg/             # tfstate 3
+└── elasticache-sg/     # tfstate 4
+```
+- 이유: 각 SG는 독립적으로 수정 빈도가 다름
+- 콘솔에서 급하게 수정 후 import 용이
+- State Lock 충돌 없음
+
+**IAM: 통합 선택**
+```
+erp-dev-IAM/
+├── main.tf             # 각 role 폴더 module 호출
+├── eks-cluster-role/
+├── eks-node-role/
+├── codebuild-role/
+└── codepipeline-role/
+```
+- 이유: Trust Policy 일관성 유지 필요
+- 권한 정책 중복 방지
+- 전체 권한 한 번에 검토 가능
+
+**배운 점:**
+- 정답은 없음, 변경 빈도와 의존성 강도로 판단
+- 현업에서는 리소스 특성에 따라 Terraform vs 콘솔 선택
+
+### 6. Redis Pub/Sub로 멀티 Pod 알림 문제 해결
+
+**문제 상황:**
+```
+Notification Service Pod 1 → WebSocket 연결 (사용자 A)
+Notification Service Pod 2 → WebSocket 연결 (사용자 B)
+
+결재 승인 시 → Pod 1에만 알림 전송 → 사용자 B는 알림 못 받음
+```
+
+**해결: Redis Pub/Sub 브로드캐스트**
+- 모든 Pod가 Redis 채널 구독
+- Redis가 모든 Pod에 메시지 브로드캐스트
+- 각 Pod는 자신에게 연결된 WebSocket 세션에만 전송
+
+**배운 점:**
+- 멀티 Pod 환경에서는 상태 공유 메커니즘 필요
+- Redis Pub/Sub, Kafka 등 메시지 브로커 활용
+
+### 7. CI/CD 파이프라인 직접 설계
+
+**CGV 프로젝트의 한계:**
+- GitLab CI/CD 코드를 받아서 백엔드용으로 리팩토링만 함
+- 파이프라인 구조는 이해했지만 직접 설계 경험 부족
+- AWS 네이티브 CI/CD 도구 미경험
+
+**DVA 취득 후 학습:**
+- CodePipeline, CodeBuild, CodeDeploy 개념 학습
+- IAM Role 기반 권한 관리
+- EKS 배포 자동화 방법
+
+**이번 프로젝트에서 구현:**
+```
+GitHub Push
+  ↓
+CodePipeline (트리거)
+  ↓
+CodeBuild (빌드)
+  - Maven package
+  - Docker build
+  - ECR push
+  ↓
+kubectl set image (배포)
+  ↓
+EKS Rolling Update
+```
+
+**buildspec.yml 직접 작성:**
+- ECR 로그인
+- Maven 빌드
+- Docker 이미지 빌드 및 푸시
+- kubectl로 EKS 배포
+
+**배운 점:**
+- CI/CD 파이프라인을 직접 설계하면서 각 단계의 역할 이해
+- IAM Role 권한 설정의 중요성 (CodeBuild가 ECR, EKS 접근 권한 필요)
+- 빌드 실패 시 디버깅 방법 (CloudWatch Logs 확인)
 
 ---
 
+## 제약사항과 의사결정
 
-##  보안 설계
-
-### 네트워크 보안
-
-#### Security Group 계층별 분리
-
-**EKS 클러스터**: VPC 내부 통신만 허용 (443, 1025-65535)  
-**RDS MySQL**: EKS 노드에서만 접근 (3306)  
-**ElastiCache Redis**: EKS 노드에서만 접근 (6379)  
-**NLB**: API Gateway VPC Link에서만 접근
-
-#### IAM 역할 최소 권한 원칙
-
-**EKS 노드 역할**:
-- AmazonEKSWorkerNodePolicy
-- AmazonEKS_CNI_Policy
-- AmazonEC2ContainerRegistryReadOnly
-- SecretsManagerAccess (커스텀 정책)
-
-**CodeBuild 역할**:
-- CloudWatch Logs 쓰기
-- ECR 이미지 푸시
-- EKS 클러스터 조회
-
-### 애플리케이션 보안
-
-#### AWS Cognito JWT 인증
+### 현실적 제약사항
 
 ```
-사용자 로그인 → Cognito User Pool → JWT 토큰 발급
-→ API Gateway (Cognito Authorizer) → 토큰 검증
-→ 백엔드 서비스 호출
+역할: 1인 개발 (풀스택 + DevOps)
+예산: AWS 크레딧 $180
+기간: 14일
 ```
 
-**비밀번호 정책**: 최소 8자, 대소문자/숫자/특수문자 포함  
-**커스텀 속성**: department, position (부서/직급 기반 권한 관리)
+**12월 1일 ~ 12일 실제 사용량:**
+```
+이번 달 사용: $123.77
+- EKS: $82.30 (66.5%)
+- EC2 (NAT Gateway): $12.82 (10.4%)
+- EC2 (Compute): $6.72 (5.4%)
+- ELB: $5.87 (4.7%)
+- RDS: $4.82 (3.9%)
+- 기타: $11.25 (9.1%)
 
-#### Secrets Manager 활용
+남은 크레딧: $54.99
+```
 
-- RDS 자격증명 암호화 저장
-- Kubernetes External Secrets Operator로 자동 동기화
-- 16자 랜덤 비밀번호 자동 생성
+### 비용 최적화 의사결정
+
+**Single-AZ 선택:**
+
+| 항목 | 프로덕션 | 개발계 | 선택 |
+|------|---------|--------|------|
+| RDS | $30/월 | $15/월 | Single-AZ |
+| NAT Gateway | $64/월 | $32/월 | Single-AZ |
+
+**절감 효과**: 월 $47 절감
+
+**트레이드오프 인식:**
+- 고가용성 포기 (99.95% → 99.5%)
+- 다운타임 허용 (자동 Failover 없음)
+- 학습 목적이므로 기능 검증이 최우선
+- 프로덕션 전환 시 Terraform 변수 하나로 Multi-AZ 전환 가능
 
 ---
 
-##  Kubernetes 매니페스트 구조
+## 얻은 능력
 
-### 디렉토리 구조
+### 1. 문제 정의 및 해결 능력
 
-```
-manifests/
-├── base/                    # 공통 리소스 (Namespace, Secrets)
-├── kafka/                   # Kafka + Zookeeper
-├── employee/                # Employee Service
-├── approval-request/        # Approval Request Service
-├── approval-processing/     # Approval Processing Service
-└── notification/            # Notification Service
-```
+- gRPC 동기 통신의 문제점을 측정 데이터로 정량화
+- Kafka 비동기 메시징으로 전환하여 85% 성능 개선
+- 문제 → 측정 → 분석 → 해결 → 검증 프로세스 경험
 
-### 주요 리소스
+### 2. 데이터 특성 분석 및 DB 선택 능력
 
-#### Deployment 설정
+- 데이터 구조, 조회 패턴, 확장성 요구사항 분석
+- MySQL, MongoDB, Redis를 적재적소 배치
+- Database per Service 패턴 실무 적용
 
-- **Replicas**: 2개 (고가용성)
-- **Resource Limits**: Memory 1Gi, CPU 500m
-- **Health Check**: Liveness/Readiness Probe (/actuator/health)
-- **Secret 주입**: Secrets Manager 자격증명 자동 주입
+### 3. 아키텍처 설계 능력
 
-#### HorizontalPodAutoscaler
+- 단일 API vs 마이크로서비스 차이 이해
+- ALB vs API Gateway 선택 기준 수립
+- 동기 vs 비동기 통신 트레이드오프 이해
 
-- **Min/Max Replicas**: 2~5
-- **Scale Up**: CPU 70% 또는 Memory 80% 초과 시
-- **Scale Down**: 5분 안정화 후 50%씩 감소
+### 4. 인프라 형상 관리 능력
 
-#### Service
+- Terraform 모듈 구조 설계 (세분화 vs 통합)
+- 실무 조언 반영하여 유지보수 용이한 구조 구축
+- 개인 프로젝트 vs 현업 구분 명확화
 
-- **Type**: ClusterIP (내부 통신)
-- **Port**: 각 서비스별 고유 포트 (8081~8084)
+### 5. 비용 최적화 능력
 
----
+- 제한된 예산으로 개발계 수준 인프라 구축
+- Single-AZ vs Multi-AZ 트레이드오프 분석
+- 실제 사용량 측정 및 비용 분석
+- 12.6일부터 계속 가동하여 운영계와 가깝게 돌려보며 안정성 검증
 
-##  주요 기능
+### 6. CI/CD 파이프라인 설계 능력
 
-### 1단계: 기본 결재 시스템
-
--  직원 관리 (CRUD)
--  결재 요청 생성
--  순차 결재 플로우 (다단계 승인)
--  실시간 알림 (WebSocket)
-
-### 2단계: AWS 클라우드 배포
-
--  Terraform 인프라 자동화
--  EKS 클러스터 배포
--  CI/CD 파이프라인 (CodePipeline + CodeBuild)
--  프론트엔드 배포 (S3 + CloudFront)
-
-### 3단계: Kafka 및 기능 확장
-
-#### Kafka 비동기 메시징
-
-**gRPC → Kafka 전환 효과**:
-- 응답시간: 850ms → 120ms (85% 개선)
-- 처리량: 35 req/s → 280 req/s (8배 증가)
-- 에러율: 5% → 0.1% (50배 감소)
-
-#### 게이미피케이션
-
-**출석 시스템**:
-- 30일 출석 → 연차 1일 자동 지급
-- 출석 진행률 실시간 표시
-
-**퀘스트 시스템**:
-- 부장이 커스텀 업무 생성
-- 사원 수락 → 완료 → 부장 승인 → 연차 보상
-
-#### 연차 관리
-
-- 연차 신청 (드롭다운으로 일수 선택)
-- 승인 시 자동 연차 차감
-- 보유 연차 실시간 조회
+- CodePipeline, CodeBuild로 GitHub → ECR → EKS 자동 배포 구축
+- buildspec.yml 직접 작성하여 빌드/배포 단계 정의
+- IAM Role 권한 설정 및 디버깅 경험
 
 ---
 
-##  성능 최적화
+## 프로젝트 구조
 
-### Kafka 도입 효과
-
-| 지표 | gRPC (2단계) | Kafka (3단계) | 개선율 |
-|------|--------------|---------------|--------|
-| 평균 응답시간 | 850ms | 120ms | 85% ↓ |
-| 처리량 | 35 req/s | 280 req/s | 800% ↑ |
-| 에러율 | 5% | 0.1% | 98% ↓ |
-| 동시 처리 | 10 | 100 | 1000% ↑ |
-
-### HPA 자동 스케일링
-
-- CPU 70% 초과 시 자동 Pod 증가
-- 트래픽 감소 시 5분 후 자동 축소
-- 비용 최적화 (평균 2 Pods, 피크 시 5 Pods)
-
----
-
-##  배포 전략
-
-### CI/CD 파이프라인
-
-```
-GitHub Push → CodePipeline 트리거
-→ CodeBuild (Maven 빌드 + Docker 이미지)
-→ ECR 푸시
-→ kubectl set image (Rolling Update)
-→ 배포 완료
-```
-
-**배포 시간**: 평균 3분 (빌드 2분 + 배포 1분)
-
-### Rolling Update 전략
-
-```yaml
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1        # 최대 1개 추가 Pod
-    maxUnavailable: 0  # 다운타임 0
-```
-
-**무중단 배포**: 새 Pod 준비 완료 후 기존 Pod 종료
-
----
-
-##  모니터링 및 로깅
-
-### CloudWatch
-
-- **Container Insights**: CPU, Memory, Network 메트릭
-- **로그 그룹**: 각 서비스별 로그 수집
-- **알람**: CPU 80% 초과 시 SNS 알림
-
-### Kubernetes 모니터링
-
-```bash
-# Pod 상태 확인
-kubectl get pods -n erp-dev
-
-# 로그 확인
-kubectl logs -n erp-dev -l app=employee-service --tail=50
-
-# HPA 상태 확인
-kubectl get hpa -n erp-dev
-
-# 리소스 사용량
-kubectl top pods -n erp-dev
-```
-
----
-
-##  프로젝트 구조
+### 전체 디렉토리 구조
 
 ```
 erp-project/
-├── backend/                          # 백엔드 서비스 (4개)
-│   ├── employee-service/
-│   │   ├── src/main/java/com/erp/employee/
-│   │   │   ├── controller/          # REST API 컨트롤러
-│   │   │   ├── service/              # 비즈니스 로직
-│   │   │   ├── repository/           # JPA Repository
-│   │   │   ├── entity/               # JPA Entity
-│   │   │   └── dto/                  # DTO
-│   │   ├── pom.xml                   # Maven 의존성
-│   │   ├── Dockerfile                # Docker 이미지 빌드
-│   │   └── buildspec.yml             # CodeBuild 설정
-│   ├── approval-request-service/
-│   ├── approval-processing-service/
-│   └── notification-service/
+├── backend/                          # 4개 마이크로서비스
+│   ├── employee-service/             # 직원 관리 (MySQL)
+│   ├── approval-request-service/     # 결재 요청 (MongoDB)
+│   ├── approval-processing-service/  # 결재 처리 (In-Memory)
+│   └── notification-service/         # 알림 (Redis + WebSocket)
 │
-├── frontend/                         # React 프론트엔드
-│   ├── src/
-│   │   ├── components/               # React 컴포넌트
-│   │   ├── pages/                    # 페이지
-│   │   ├── services/                 # API 호출
-│   │   └── App.jsx                   # 메인 앱
-│   ├── package.json
-│   └── vite.config.js
+├── frontend/                         # React + Vite
 │
-├── infrastructure/terraform/dev/     # Terraform 인프라 코드
-│   ├── erp-dev-VPC/                  # VPC, Subnet, Route Table
-│   ├── erp-dev-SecurityGroups/       # Security Groups
-│   ├── erp-dev-IAM/                  # IAM Roles
+├── infrastructure/terraform/dev/     # Terraform IaC (9개 모듈)
+│   ├── erp-dev-VPC/                  # VPC, Subnet, NAT Gateway
+│   ├── erp-dev-SecurityGroups/       # 세분화 (4개 tfstate)
+│   │   ├── eks-cluster-sg/
+│   │   ├── eks-node-sg/
+│   │   ├── rds-sg/
+│   │   └── elasticache-sg/
+│   ├── erp-dev-IAM/                  # 통합 (1개 tfstate)
+│   │   ├── main.tf                   # module 호출
+│   │   ├── eks-cluster-role/
+│   │   ├── eks-node-role/
+│   │   ├── codebuild-role/
+│   │   └── codepipeline-role/
 │   ├── erp-dev-Secrets/              # Secrets Manager
 │   ├── erp-dev-Databases/            # RDS, ElastiCache
-│   ├── erp-dev-EKS/                  # EKS Cluster
+│   ├── erp-dev-EKS/                  # EKS Cluster, Node Group
 │   ├── erp-dev-LoadBalancerController/
 │   ├── erp-dev-APIGateway/           # API Gateway, NLB
 │   ├── erp-dev-Frontend/             # S3, CloudFront
-│   └── erp-dev-Cognito/              # Cognito User Pool
+│   └── erp-dev-Cognito/              # User Pool, App Client
 │
-└── manifests/                        # Kubernetes Manifest
-    ├── base/                         # Namespace, Secrets
-    ├── kafka/                        # Kafka, Zookeeper
-    ├── employee/                     # Employee Service
-    ├── approval-request/
-    ├── approval-processing/
-    └── notification/
+└── manifests/                        # Kubernetes Manifests
+    ├── employee-deployment.yaml
+    ├── approval-request-deployment.yaml
+    ├── approval-processing-deployment.yaml
+    ├── notification-deployment.yaml
+    └── kafka-deployment.yaml
 ```
 
----
+### Terraform 배포 순서
 
-##  학습 내용 및 성과
+**의존성을 고려한 순차적 배포:**
 
-### 새로 배운 기술
+```bash
+# 1. VPC (기반 인프라)
+cd erp-dev-VPC && terraform apply
 
--  **Terraform**: 30+ AWS 리소스 IaC 관리
--  **Kubernetes**: 50+ Manifest 작성, HPA, Rolling Update
--  **Kafka**: 비동기 메시징, Producer/Consumer 구현
--  **gRPC**: Proto 파일 작성, 서비스 간 RPC 통신
--  **MongoDB**: 문서형 DB, 복잡한 중첩 구조 설계
--  **AWS Cognito**: JWT 토큰 인증, API Gateway 통합
--  **CodePipeline**: GitHub 연동, 자동 배포
+# 2. SecurityGroups (VPC 의존, 4개 순차)
+cd erp-dev-SecurityGroups/eks-cluster-sg && terraform apply
+cd ../eks-node-sg && terraform apply
+cd ../rds-sg && terraform apply
+cd ../elasticache-sg && terraform apply
 
-### 문제 해결 경험
+# 3. IAM (독립적)
+cd ../../erp-dev-IAM && terraform apply
 
-#### 1. Kafka PVC Pending 문제
-**문제**: Bitnami Helm Chart의 StatefulSet이 PVC를 자동 생성하지만 StorageClass 없음  
-**해결**: Confluent 이미지로 Deployment 직접 작성, 메모리만 사용
+# 4~10. 나머지 모듈 순차 배포
+# Secrets → Databases → EKS → LoadBalancerController → APIGateway → Frontend → Cognito
+```
 
-#### 2. gRPC 타입 불일치
-**문제**: `KafkaTemplate<String, ApprovalRequestMessage>` vs `KafkaTemplate<String, Object>`  
-**해결**: Producer 타입을 Object로 통일, JsonSerializer 사용
-
-#### 3. API Gateway 404 에러
-**문제**: NLB Target Group이 Pod IP를 찾지 못함  
-**해결**: Service Type을 LoadBalancer로 변경, NLB가 자동으로 Target 등록
+**상세 문서:**
+- [backend/README.md](./backend/README.md) - 서비스별 API 명세
+- [infrastructure/README.md](./infrastructure/README.md) - Terraform 배포 가이드
 
 ---
 
-##  비용 분석
+## 빠른 시작
 
-### 월 예상 비용: $191
-
-| 리소스 | 사양 | 월 비용 |
-|--------|------|---------|
-| EKS Control Plane | - | $73 |
-| EC2 (Worker Nodes) | t3.small × 2 | $30 |
-| RDS MySQL | db.t3.micro | $15 |
-| ElastiCache Redis | cache.t3.micro | $12 |
-| NAT Gateway | 2개 (Multi-AZ) | $32 |
-| Network Load Balancer | - | $16 |
-| CloudFront | 1GB 전송 | $1 |
-| API Gateway | 100만 요청 | $3 |
-| S3 | 1GB 저장 | $0.5 |
-| 기타 (CloudWatch, ECR) | - | $8.5 |
-
-**비용 최적화 전략**:
--  t3.small 인스턴스 사용 (t3.medium 대비 50% 절감)
--  MongoDB Atlas Free Tier (M0)
--  HPA로 필요 시에만 스케일 업
--  Single-AZ RDS (Multi-AZ 대비 50% 절감)
-
----
-
-##  빠른 시작
-
-### 사전 요구사항
-
-- AWS CLI 설치 및 구성
-- kubectl 설치
-- Terraform 1.6+ 설치
-- Docker 설치
-- Maven 3.9+ 설치
-- Node.js 18+ 설치
-
-### 1. 저장소 클론
-
+### 로컬 실행
 ```bash
 git clone https://github.com/sss654654/erp-microservices.git
-cd erp-microservices
+cd erp-project
+docker-compose up -d
 ```
 
-### 2. 인프라 구축
-
+### AWS 배포
 ```bash
 cd infrastructure/terraform/dev
-
-# 순서대로 실행
-cd erp-dev-VPC && terraform init && terraform apply -auto-approve
-cd ../erp-dev-SecurityGroups && terraform init && terraform apply -auto-approve
-cd ../erp-dev-IAM && terraform init && terraform apply -auto-approve
-cd ../erp-dev-Secrets && terraform init && terraform apply -auto-approve
-cd ../erp-dev-Databases && terraform init && terraform apply -auto-approve
-cd ../erp-dev-EKS && terraform init && terraform apply -auto-approve
-cd ../erp-dev-LoadBalancerController && terraform init && terraform apply -auto-approve
-cd ../erp-dev-APIGateway && terraform init && terraform apply -auto-approve
-cd ../erp-dev-Frontend && terraform init && terraform apply -auto-approve
-cd ../erp-dev-Cognito && terraform init && terraform apply -auto-approve
+# VPC → SecurityGroups → IAM → Databases → EKS 순차 배포
 ```
 
-### 3. Kubernetes 배포
-
-```bash
-# EKS 클러스터 연결
-aws eks update-kubeconfig --name erp-dev --region ap-northeast-2
-
-# 매니페스트 배포
-kubectl apply -f manifests/base/
-kubectl apply -f manifests/kafka/
-kubectl apply -f manifests/employee/
-kubectl apply -f manifests/approval-request/
-kubectl apply -f manifests/approval-processing/
-kubectl apply -f manifests/notification/
-
-# 배포 확인
-kubectl get pods -n erp-dev
-```
-
-### 4. 프론트엔드 배포
-
-```bash
-cd frontend
-npm install
-npm run build
-aws s3 sync dist/ s3://erp-dev-frontend-dev --delete
-```
+상세 가이드: [infrastructure/README.md](./infrastructure/README.md)
 
 ---
 
-##  연락처
+## 회고
 
-**개발자**: 홍수빈  
-**이메일**: [your-email@example.com]  
-**GitHub**: https://github.com/sss654654/erp-microservices  
-**포트폴리오**: [your-portfolio-url]
+### 잘한 점
+
+1. **문제를 직접 경험**: gRPC로 먼저 구현하여 동기 통신의 한계를 체감
+2. **데이터 기반 의사결정**: 측정 데이터로 문제 정량화, 개선 효과 검증
+3. **실무 조언 반영**: 멘토 조언을 바탕으로 Terraform 구조 설계
+4. **트레이드오프 인식**: Single-AZ 선택 시 고가용성 포기를 명확히 인식
+
+### 아쉬운 점
+
+1. **모니터링 부족**: Prometheus + Grafana 미구현, Kafka Lag 모니터링 부재
+2. **테스트 자동화**: 단위 테스트, 통합 테스트 부족
+3. **보안 강화 필요**: Kafka TLS/SSL 미적용, Network Policy 미설정
+4. **Terraform 전체 구현**: 시간 부족으로 모든 리소스를 Terraform으로 구현. 현업에서는 VPC, Subnet, ECR, DB Subnet까지만 Terraform 사용하고 나머지는 콘솔 관리가 일반적. 어떤 리소스를 Terraform으로 하고 어떤 것을 직접 만들어야 하는지 개념적으로만 알고 직접 느껴보지 못함
+5. **API Gateway 활용 부족**: Lambda 연동 미구현으로 API Gateway의 핵심 장점 활용 못함
+
+**API Gateway 현재 활용:**
+- 마이크로서비스 단일 진입점
+- CORS 중앙 관리
+- Cognito JWT 토큰 검증
+- 경로 재작성 (`/api/employees` → `/employees`)
+
+**API Gateway + Lambda 연동 시 추가 가능:**
+- **사용량 기반 과금**: API 호출 시에만 Lambda 실행, Pod 항시 실행 불필요
+- **서버리스 아키텍처**: EKS 비용 절감 (월 $82.30 → $0, Lambda 호출당 과금)
+- **자동 스케일링**: Lambda가 요청량에 따라 자동 확장, HPA 설정 불필요
+- **콜드 스타트 최적화**: Provisioned Concurrency로 지연 시간 최소화
+- **API 변환 레이어**: Lambda에서 요청/응답 변환, 레거시 시스템 통합 용이
+
+### 다음 프로젝트에서 개선할 점
+
+1. 처음부터 모니터링 구축 (Prometheus + Grafana)
+2. TDD 방식으로 테스트 커버리지 확보
+3. 보안 요구사항을 초기 설계에 반영
+4. Terraform vs 콘솔 관리 기준을 실무 경험으로 체득 (변경 빈도, 협업 필요성 고려)
+5. API Gateway + Lambda 연동으로 서버리스 아키텍처 경험
 
 ---
 
-##  라이선스
+**"완벽한 설계는 없다. 문제를 경험하고, 측정하고, 개선하는 과정이 중요하다."**
 
-MIT License
-
----
-
-##  감사의 말
-
-이 프로젝트는 14일간의 집중 개발 끝에 완성되었습니다. AWS 클라우드, Kubernetes, 마이크로서비스 아키텍처에 대한 깊은 이해를 얻을 수 있었으며, 실무에서 바로 적용 가능한 기술들을 습득했습니다.
-
-특히 Terraform을 통한 인프라 자동화, Kafka를 통한 비동기 메시징, Kubernetes를 통한 컨테이너 오케스트레이션 경험은 매우 값진 자산이 되었습니다.
-
----
-
-** 이 프로젝트가 도움이 되셨다면 Star를 눌러주세요!**
+이 프로젝트는 CI/CD 파이프라인을 직접 설계하고, Terraform으로 전체 인프라를 코드화한 과정을 담았습니다. CGV에서 Kinesis를 경험한 후, 마이크로서비스 환경에서는 Consumer Group과 Offset 관리가 유리한 Kafka를 선택하여 서비스 간 비동기 메시징을 구현했습니다. 동기 통신(gRPC)의 한계를 직접 겪고 비동기 아키텍처로 전환하여 응답 시간을 약 85% 개선했습니다 (850ms → 120ms).
