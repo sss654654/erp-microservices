@@ -249,27 +249,39 @@ CGV 프로젝트에서는 Kinesis를 사용했지만, 이번에는 Kafka를 선�
 - 모든 데이터를 하나의 DB에 넣는 것이 아니라, 데이터 특성 분석 후 적합한 DB 선택
 - Database per Service 패턴으로 각 서비스가 독립적으로 확장 가능
 
-### 4. API Gateway vs ALB 선택
+### 4. 아키텍처 선택: Kubernetes Service 타입과 로드밸런서
 
-**CGV 프로젝트: ALB 선택**
-- 단일 API 서버
-- 대량 트래픽 집중 처리
-- Layer 7 로드밸런싱만 필요
+#### CGV vs ERP: 다른 목표, 다른 아키텍처
 
-**ERP 프로젝트: API Gateway 선택**
-- 4개 마이크로서비스
-- 각 서비스마다 다른 경로 (/employees, /approvals, /process, /notifications)
-- CORS 설정을 각 서비스마다 하면 중복 관리
+**CGV 프로젝트 (대규모 트래픽 처리)**
+```
+ALB → Ingress → Service (ClusterIP) → Pod (단일 API)
+```
+- 목표: 10,000명 동시 접속을 단일 진입점에서 분배
+- ALB로 충분 (Layer 7 라우팅, 가용성 중심)
+- 개발계/운영계/DR 구성으로 재해 복구 대비
 
-**API Gateway 선택 이유:**
-1. 마이크로서비스 단일 진입점
-2. CORS 중앙 관리 (각 서비스마다 설정 불필요)
-3. Cognito 통합으로 JWT 토큰 검증 자동화
-4. 경로 재작성 (`/api/employees` → `/employees`)
+**ERP 프로젝트 (마이크로서비스 관리)**
+```
+API Gateway → VPC Link → NLB → Service (LoadBalancer) → Pods (4개 서비스)
+```
+- 목표: 4개 독립 서비스를 단일 API로 통합 관리
+- 각 서비스마다 인증/CORS 구현 시 코드 중복 → API Gateway로 중앙 관리
+- API Gateway는 VPC Link 필요 → VPC Link는 NLB만 지원 → Service는 LoadBalancer 타입 필수
 
-**배운 점:**
-- 아키텍처에 따라 적합한 도구가 다름
-- 단일 API는 ALB, 마이크로서비스는 API Gateway
+#### Kubernetes Service 타입 선택 과정
+
+| Service 타입 | 특징 | CGV | ERP |
+|-------------|------|-----|-----|
+| ClusterIP | 클러스터 내부, Layer 4 | ✅ Ingress가 참조 | ❌ 외부 노출 불가 |
+| LoadBalancer | 외부 LB 자동 생성, Layer 4 | ❌ Ingress로 충분 | ✅ NLB 연결 필요 |
+| Ingress | 외부 존재, Layer 7 (URL/헤더 분석) | ✅ ALB 생성 | ❌ API Gateway와 중복 |
+
+**핵심**: 마이크로서비스 → API Gateway 필요 → VPC Link → NLB 필수 → LoadBalancer 타입 자연스럽게 결정
+
+#### 배운 점
+
+아키텍처는 요구사항에 따라 자연스럽게 도출됩니다. CGV는 대규모 트래픽 분산이 목표였고, ERP는 마이크로서비스 중앙 관리가 목표였습니다. Kubernetes Service 타입, ALB/NLB 특성, API Gateway 제약사항을 이해하면 최적의 조합을 선택할 수 있습니다.
 
 ### 5. Terraform 구조 설계
 
@@ -491,11 +503,12 @@ erp-project/
 │   └── erp-dev-Cognito/              # User Pool, App Client
 │
 └── manifests/                        # Kubernetes Manifests
-    ├── employee-deployment.yaml
-    ├── approval-request-deployment.yaml
-    ├── approval-processing-deployment.yaml
-    ├── notification-deployment.yaml
-    └── kafka-deployment.yaml
+    ├── base/                         # ConfigMap, Secret, TargetGroupBinding
+    ├── employee/                     # Deployment, Service, HPA
+    ├── approval-request/             # Deployment, Service, HPA
+    ├── approval-processing/          # Deployment, Service, HPA
+    ├── notification/                 # Deployment, Service, HPA
+    └── kafka/                        # Kafka Deployment
 ```
 
 ### Terraform 배포 순서
@@ -559,28 +572,125 @@ cd infrastructure/terraform/dev
 2. **테스트 자동화**: 단위 테스트, 통합 테스트 부족
 3. **보안 강화 필요**: Kafka TLS/SSL 미적용, Network Policy 미설정
 4. **Terraform 전체 구현**: 시간 부족으로 모든 리소스를 Terraform으로 구현. 현업에서는 VPC, Subnet, ECR, DB Subnet까지만 Terraform 사용하고 나머지는 콘솔 관리가 일반적. 어떤 리소스를 Terraform으로 하고 어떤 것을 직접 만들어야 하는지 개념적으로만 알고 직접 느껴보지 못함
-5. **API Gateway 활용 부족**: Lambda 연동 미구현으로 API Gateway의 핵심 장점 활용 못함
+5. **하이브리드 구조 미구현**: API Gateway + Lambda + NLB 혼합 구조를 구현하지 못함
 
-**API Gateway 현재 활용:**
-- 마이크로서비스 단일 진입점
-- CORS 중앙 관리
-- Cognito JWT 토큰 검증
-- 경로 재작성 (`/api/employees` → `/employees`)
+#### 하이브리드 구조였다면?
 
-**API Gateway + Lambda 연동 시 추가 가능:**
-- **사용량 기반 과금**: API 호출 시에만 Lambda 실행, Pod 항시 실행 불필요
-- **서버리스 아키텍처**: EKS 비용 절감 (월 $82.30 → $0, Lambda 호출당 과금)
-- **자동 스케일링**: Lambda가 요청량에 따라 자동 확장, HPA 설정 불필요
-- **콜드 스타트 최적화**: Provisioned Concurrency로 지연 시간 최소화
-- **API 변환 레이어**: Lambda에서 요청/응답 변환, 레거시 시스템 통합 용이
+**현재 구조 (모든 서비스 EKS Pod)**
+```
+API Gateway
+  ↓ VPC Link
+NLB
+  ↓
+├─ Employee Service (Pod 2개)
+├─ Approval Request (Pod 2개)
+├─ Approval Processing (Pod 2개)
+└─ Notification (Pod 2개)
 
-### 다음 프로젝트에서 개선할 점
+총 8개 Pod 항시 실행
+비용: EKS $82.30/월
+```
 
-1. 처음부터 모니터링 구축 (Prometheus + Grafana)
-2. TDD 방식으로 테스트 커버리지 확보
-3. 보안 요구사항을 초기 설계에 반영
-4. Terraform vs 콘솔 관리 기준을 실무 경험으로 체득 (변경 빈도, 협업 필요성 고려)
-5. API Gateway + Lambda 연동으로 서버리스 아키텍처 경험
+**Pod 설정 이유:**
+- **비용 고려**: 개발 환경이므로 최소 구성 (replicas: 2, HPA max: 3)
+- **프로덕션 확장 기반**: HPA, RollingUpdate 등 기본 설정만 구현, 추후 확장 가능
+- **노드 3개**: Kafka 설치를 위한 최소 구성 (Kafka는 최소 3개 브로커 권장)
+- **배포 전략**: 개발 환경이므로 가장 기본적인 RollingUpdate 선택
+
+**실제 설정:**
+```yaml
+# Deployment
+replicas: 2
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1  # 동시에 중단 가능한 Pod 1개
+
+# HPA (구현만 해놓음, 실제 트래픽 적음)
+minReplicas: 2
+maxReplicas: 3
+targetCPUUtilizationPercentage: 70
+
+# Node Group (Kafka 때문에 3개)
+desired: 3
+min: 1
+max: 3
+```
+
+**프로덕션 전환 시 확장 방향:**
+- **HPA**: maxReplicas 10~20으로 증가
+- **노드**: desired 6~10개, max 20개로 증가
+- **배포 전략**: Blue/Green 또는 Canary로 전환
+- **모니터링**: Prometheus + Grafana 추가
+- **현재는 기반만 다진 상태**
+
+**하이브리드 구조였다면 (간단한 API는 Lambda)**
+```
+API Gateway
+  ├─ /employees/*              → Lambda (간단한 CRUD, 호출 시에만 실행)
+  ├─ /notifications/*          → NLB → EKS (WebSocket 연결 유지 필요)
+  └─ /approvals/*              → NLB → EKS (복잡한 비즈니스 로직)
+      ├─ Approval Request      (결재 요청 생성, Kafka Producer)
+      └─ Approval Processing   (결재 처리, Kafka Consumer)
+
+총 6개 Pod (Notification 2개 + Approval Request 2개 + Approval Processing 2개)
+비용 절감: EKS $82.30 → $61.73 (25% 절감) + Lambda $3 = $64.73
+```
+
+**Lambda로 전환 가능한 서비스:**
+
+**Employee Service** (직원 조회/등록)
+- 간단한 CRUD 작업
+- MySQL 조회만 수행
+- 복잡한 비즈니스 로직 없음
+- Lambda 실행 시간: 평균 200ms (15분 제한 문제 없음)
+- **Pod 2개 제거 가능**
+
+**Lambda로 전환 불가능한 서비스:**
+
+**Notification Service** (알림 전송)
+- **WebSocket 연결 유지 필요**: Lambda는 요청-응답 모델, 지속적인 연결 불가
+- **Redis Pub/Sub 구독**: 지속적인 구독 불가
+- **Cold Start 문제**: 실시간 알림에 300~500ms 지연 치명적
+
+**Approval Services** (결재 요청 + 결재 처리)
+- **Kafka Consumer 장시간 실행**: Processing Service는 Kafka를 지속적으로 폴링, Lambda 15분 제한 초과
+- **복잡한 비즈니스 로직**: 결재 단계별 처리, 조건 분기, 상태 관리 등 복잡
+- **서비스 간 강한 결합**: Request ↔ Processing이 Kafka로 긴밀히 연결, 분리 어려움
+
+**비용 비교 (월 기준)**
+
+| 항목 | 현재 (모두 EKS) | 하이브리드 (Lambda + EKS) |
+|------|----------------|--------------------------|
+| EKS | $82.30 (8 Pods) | $61.73 (6 Pods) |
+| Lambda | $0 | $3 (Employee만) |
+| **합계** | **$82.30** | **$64.73 (21% 절감)** |
+
+**Lambda 장점:**
+- 사용량 기반 과금 (호출 시에만 비용)
+- 자동 스케일링 (HPA 설정 불필요)
+- 서버 관리 불필요
+
+**Lambda 단점:**
+- Cold Start (첫 요청 지연 300~500ms)
+- 실행 시간 제한 (15분)
+- **WebSocket 지원 불가** (지속적인 연결 불가)
+- **실시간 구독 불가** (Redis Pub/Sub 등)
+
+**왜 구현하지 못했나?**
+- 14일 기간 제약
+- Lambda + RDS 연결 설정 (VPC, Security Group)
+- API Gateway 라우팅 분기 (Lambda vs NLB)
+- 학습 우선순위: Kafka 비동기 메시징이 더 중요하다고 판단
+- **결과적으로 EKS 비용 $82.30 발생, 하이브리드였다면 $64.73로 21% 절감 가능**
+
+### 이번 프로젝트에서 개선할 점
+
+1. **하이브리드 구조 구현**: 간단한 API는 Lambda, 복잡한 API는 EKS로 분리하여 비용 최적화
+2. **모니터링 구축**: Prometheus + Grafana로 Kafka Lag, Pod 메트릭 실시간 모니터링
+3. **테스트 자동화**: TDD 방식으로 단위/통합 테스트 커버리지 확보
+4. **보안 강화**: Kafka TLS/SSL, Network Policy를 초기 설계에 반영
+5. **Terraform vs 콘솔 기준**: 변경 빈도와 협업 필요성을 고려한 리소스별 관리 방식 체득
 
 ---
 
