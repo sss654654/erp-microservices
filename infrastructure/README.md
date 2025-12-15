@@ -190,6 +190,98 @@ EKS $73, Worker Nodes $45 (3개), RDS $15, ElastiCache $12, NAT Gateway $32, NLB
 
 ---
 
+## 하이브리드 구조 미구현
+
+### 현재 구조 (모두 EKS)
+
+```
+API Gateway (단일 진입점)
+  ├─ /employees/*     → VPC Link → NLB → Employee Pods (2)
+  ├─ /approvals/*     → VPC Link → NLB → Approval Pods (4) - Kafka
+  └─ /notifications/* → VPC Link → NLB → Notification Pods (2) - WebSocket
+
+총 8 Pods (Employee 2 + Approval Request 2 + Approval Processing 2 + Notification 2)
+비용: EKS $82.30/월
+```
+
+### 하이브리드 구조였다면
+
+**API Gateway의 장점 활용**
+
+현재 프로젝트에서 API Gateway를 선택한 이유는 마이크로서비스 중앙 관리(인증/CORS)였습니다. API Gateway의 또 다른 강력한 기능은 **Lambda 직접 통합**입니다. VPC Link 없이 Lambda를 바로 호출할 수 있어, 간단한 API는 Lambda로 분리하면 비용 절감이 가능합니다.
+
+**아키텍처:**
+```
+API Gateway (단일 진입점)
+  ├─ /employees/*     → Lambda (직접 통합, VPC Link 불필요) → RDS Proxy → MySQL
+  ├─ /approvals/*     → VPC Link → NLB → Approval Pods (4) - Kafka
+  └─ /notifications/* → VPC Link → NLB → Notification Pods (2) - WebSocket
+
+총 6 Pods (Approval Request 2 + Approval Processing 2 + Notification 2)
+비용: EKS $61.73 (6 Pods) + Lambda $3 = $64.73 (21% 절감)
+```
+
+**Lambda 통합 방식:**
+
+1. **API Gateway → Lambda (직접 통합)**
+   - VPC Link 불필요
+   - Lambda가 RDS Proxy 통해 MySQL 접근
+   - Cold Start: 300~500ms (첫 요청만)
+
+2. **API Gateway → VPC Link → NLB (기존 방식)**
+   - WebSocket, Kafka Consumer는 EKS 유지
+   - 지속적인 연결/장시간 실행 필요
+
+**Lambda 전환 가능:**
+- **Employee Service**: 간단한 CRUD, MySQL 조회만, 실행 시간 200ms
+
+**Lambda 전환 불가:**
+- **Notification**: WebSocket 연결 유지 필요 (Lambda는 요청-응답 모델)
+- **Approval Services**: Kafka Consumer 장시간 실행 (Lambda 15분 제한 초과)
+
+**API Gateway 라우팅 설정:**
+```yaml
+# Lambda 통합
+/employees/{proxy+}:
+  ANY:
+    integration: AWS_PROXY
+    uri: arn:aws:lambda:ap-northeast-2:xxx:function:employee-service
+
+# NLB 통합 (VPC Link)
+/notifications/{proxy+}:
+  ANY:
+    integration: HTTP_PROXY
+    connectionType: VPC_LINK
+    uri: http://nlb-internal.amazonaws.com/notifications/{proxy}
+
+/approvals/{proxy+}:
+  ANY:
+    integration: HTTP_PROXY
+    connectionType: VPC_LINK
+    uri: http://nlb-internal.amazonaws.com/approvals/{proxy}
+```
+
+**왜 구현 못 했나:**
+- 14일 기간 제약
+- Lambda + RDS Proxy 연결 설정
+- API Gateway 라우팅 분기 구현
+- 학습 우선순위: Kafka 비동기 메시징
+
+**상세 비용 비교:**
+
+| 항목 | 현재 (모두 EKS) | 하이브리드 |
+|------|----------------|-----------|
+| EKS | $82.30 (8 Pods) | $61.73 (6 Pods) |
+| Lambda | $0 | $3 |
+| 합계 | $82.30 | $64.73 |
+
+**핵심:**
+- API Gateway는 Lambda 직접 통합 가능 (VPC Link 불필요)
+- 간단한 API는 Lambda, 복잡한 API는 NLB → EKS
+- 하나의 API Gateway에서 Lambda와 NLB를 동시에 사용하는 하이브리드 구조
+
+---
+
 ## 트러블슈팅
 
 **Terraform State Lock**
