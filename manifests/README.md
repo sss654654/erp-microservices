@@ -303,7 +303,10 @@ spec:
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
+metadata:
+  name: kafka
 spec:
+  serviceName: kafka-headless
   replicas: 3
   volumeClaimTemplates:
   - metadata:
@@ -321,11 +324,91 @@ spec:
 | 항목 | Deployment | StatefulSet |
 |------|-----------|-------------|
 | Pod 이름 | kafka-xxxxx (랜덤) | kafka-0, kafka-1, kafka-2 (고정) |
-| 생성 순서 | 동시 | 순차 (0→1→2) |
-| 볼륨 | 공유 불가 | 각 Pod마다 고유 EBS |
+| 생성 순서 | 동시 (병렬) | 순차 (0→1→2) |
+| 삭제 순서 | 동시 (병렬) | 역순 (2→1→0, 마스터 보호) |
+| 볼륨 | 공유 어려움 (EFS 필요) | 각 Pod마다 고유 EBS |
 | 재시작 | 새 Pod, 새 볼륨 | 같은 이름, 같은 볼륨 |
 | 데이터 | 소실 | 보존 |
 | 적합 | Stateless (API) | Stateful (DB, Kafka) |
+
+---
+
+### StatefulSet 동작 과정
+
+**스토리지 생성 흐름:**
+```
+StatefulSet
+  ↓ volumeClaimTemplates
+PVC 생성 요청
+  ↓ storageClassName: gp3 참조
+StorageClass (gp3)
+  ↓ EBS CSI Driver 호출
+AWS EBS 볼륨 생성
+  ↓ 
+PV 자동 생성 (EBS 연결)
+  ↓
+PVC ↔ PV 바인딩
+  ↓
+Pod가 PVC 마운트
+```
+
+**배포 시 순차 생성:**
+```bash
+kubectl apply -f kafka-statefulset.yaml
+```
+```
+Step 1: kafka-0 생성
+  ├─ PVC 생성: kafka-data-kafka-0
+  ├─ StorageClass gp3가 EBS 볼륨 자동 생성 (10Gi)
+  ├─ PV 자동 생성 및 PVC 바인딩
+  ├─ Pod kafka-0 생성, 볼륨 마운트
+  └─ Ready 확인 후 다음 Pod 생성 ✅
+
+Step 2: kafka-1 생성 (kafka-0 Ready 후)
+  ├─ PVC 생성: kafka-data-kafka-1
+  ├─ 새 EBS 볼륨 생성 (10Gi)
+  └─ Pod kafka-1 생성 ✅
+
+Step 3: kafka-2 생성 (kafka-1 Ready 후)
+  └─ 동일 과정 반복 ✅
+```
+
+**Pod 재시작 시 (핵심):**
+```
+Deployment:
+  Pod 삭제 → 새 Pod (랜덤 이름) → 메모리만 사용 → 데이터 소실 ❌
+
+StatefulSet:
+  Pod kafka-1 삭제
+    ↓
+  PVC kafka-data-kafka-1 유지 (EBS 볼륨 보존)
+    ↓
+  새 Pod kafka-1 생성 (같은 이름, 고정 ID)
+    ↓
+  같은 PVC 연결 → 같은 EBS 마운트 → 데이터 복구 ✅
+```
+
+**삭제 시 역순 (마스터 보호):**
+```bash
+kubectl delete statefulset kafka
+```
+```
+kafka-2 삭제 → kafka-1 삭제 → kafka-0 삭제 (마지막)
+
+이유: 분산 DB에서 0번은 보통 마스터 역할
+      중요한 정보가 있으므로 마지막에 삭제
+```
+
+**용어:**
+- **PV (PersistentVolume)**: 실제 스토리지 (EBS 볼륨)
+- **PVC (PersistentVolumeClaim)**: Pod가 스토리지 요청
+- **StorageClass (SC)**: 스토리지 타입 정의 (gp3, gp2 등), PV 자동 생성
+- **volumeClaimTemplates**: 각 Pod마다 PVC 자동 생성 (StatefulSet 전용)
+- **ReadWriteOnce (RWO)**: 단일 노드에서만 읽기/쓰기 (EBS 기본값)
+
+**비용:**
+- EBS gp3: $0.08/GB/월
+- 10Gi × 3개 = $2.4/월
 
 ---
 
