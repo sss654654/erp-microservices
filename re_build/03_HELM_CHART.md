@@ -531,7 +531,7 @@ services:
         value: "kafka.erp-dev.svc.cluster.local:9092"
   
   employee:
-    enabled: true
+    enabled: false  # Lambda로 전환됨
     name: employee-service
     replicaCount: 2
     image:
