@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 검증 체크리스트
+##  검증 체크리스트
 
 ### Phase 1: Helm 배포 확인 (15분)
 ### Phase 2: Kubernetes 리소스 확인 (15분)
@@ -15,7 +15,7 @@
 
 ---
 
-## ✅ Phase 1: Helm 배포 확인 (15분)
+##  Phase 1: Helm 배포 확인 (15분)
 
 ### 1-1. Helm Release 확인
 
@@ -29,9 +29,9 @@ helm list -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ STATUS가 `deployed`
-- ✅ REVISION이 1 이상
-- ✅ CHART 이름이 `erp-microservices-0.1.0`
+-  STATUS가 `deployed`
+-  REVISION이 1 이상
+-  CHART 이름이 `erp-microservices-0.1.0`
 
 ### 1-2. Helm 히스토리 확인
 
@@ -45,8 +45,8 @@ helm history erp-microservices -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 최소 1개 이상의 REVISION
-- ✅ 최신 REVISION의 STATUS가 `deployed`
+-  최소 1개 이상의 REVISION
+-  최신 REVISION의 STATUS가 `deployed`
 
 ### 1-3. Helm Values 확인
 
@@ -68,13 +68,13 @@ helm get values erp-microservices -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ image.tag가 Git 커밋 해시 (7자리)
-- ✅ namespace가 `erp-dev`
-- ✅ 4개 서비스 모두 설정됨
+-  image.tag가 Git 커밋 해시 (7자리)
+-  namespace가 `erp-dev`
+-  4개 서비스 모두 설정됨
 
 ---
 
-## ✅ Phase 2: Kubernetes 리소스 확인 (15분)
+##  Phase 2: Kubernetes 리소스 확인 (15분)
 
 ### 2-1. Pod 상태 확인
 
@@ -97,10 +97,10 @@ kubectl get pods -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 모든 Pod가 `Running` 상태
-- ✅ READY가 `1/1`
-- ✅ RESTARTS가 0 또는 낮은 숫자
-- ✅ 총 10개 Pod (서비스 8개 + Kafka + Zookeeper)
+-  모든 Pod가 `Running` 상태
+-  READY가 `1/1`
+-  RESTARTS가 0 또는 낮은 숫자
+-  총 10개 Pod (서비스 8개 + Kafka + Zookeeper)
 
 **문제 발생 시:**
 ```bash
@@ -128,11 +128,11 @@ kubectl get svc -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 모든 Service가 `ClusterIP` (LoadBalancer 없음)
-- ✅ PORT(S)가 올바름 (8081, 8082, 8083, 8084, 9092, 2181)
-- ✅ EXTERNAL-IP가 `<none>` (내부 통신만)
+-  모든 Service가 `ClusterIP` (LoadBalancer 없음)
+-  PORT(S)가 올바름 (8081, 8082, 8083, 8084, 9092, 2181)
+-  EXTERNAL-IP가 `<none>` (내부 통신만)
 
-**⚠️ 중요: LoadBalancer 타입이 있으면 문제!**
+**️ 중요: LoadBalancer 타입이 있으면 문제!**
 ```bash
 # LoadBalancer 타입 확인
 kubectl get svc -n erp-dev -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}'
@@ -158,10 +158,10 @@ kubectl get targetgroupbinding -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 4개 TargetGroupBinding 존재
-- ✅ SERVICE-NAME이 올바름
-- ✅ SERVICE-PORT가 올바름
-- ✅ TARGET-TYPE이 `ip`
+-  4개 TargetGroupBinding 존재
+-  SERVICE-NAME이 올바름
+-  SERVICE-PORT가 올바름
+-  TARGET-TYPE이 `ip`
 
 **상세 확인:**
 ```bash
@@ -192,11 +192,11 @@ kubectl get hpa -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 4개 HPA 존재
-- ✅ MINPODS가 2
-- ✅ MAXPODS가 3
-- ✅ REPLICAS가 2 (현재 Pod 수)
-- ✅ TARGETS가 70% 미만 (정상)
+-  4개 HPA 존재
+-  MINPODS가 2
+-  MAXPODS가 3
+-  REPLICAS가 2 (현재 Pod 수)
+-  TARGETS가 70% 미만 (정상)
 
 ### 2-5. 이미지 태그 확인
 
@@ -214,13 +214,13 @@ kubectl get deployment -n erp-dev -o jsonpath='{range .items[*]}{.metadata.name}
 ```
 
 **확인 사항:**
-- ✅ 4개 서비스 이미지 태그가 Git 커밋 해시 (7자리)
-- ✅ Kafka, Zookeeper 이미지가 올바름
-- ✅ `:latest` 태그가 없음
+-  4개 서비스 이미지 태그가 Git 커밋 해시 (7자리)
+-  Kafka, Zookeeper 이미지가 올바름
+-  `:latest` 태그가 없음
 
 ---
 
-## ✅ Phase 3: API Gateway 테스트 (15분)
+##  Phase 3: API Gateway 테스트 (15분)
 
 ### 3-1. NLB Target Health 확인
 
@@ -262,9 +262,9 @@ aws elbv2 describe-target-health \
 ```
 
 **확인 사항:**
-- ✅ 4개 Target Group 모두 존재
-- ✅ 각 Target Group에 2개 Target (Pod IP)
-- ✅ 모든 Target의 State가 `healthy`
+-  4개 Target Group 모두 존재
+-  각 Target Group에 2개 Target (Pod IP)
+-  모든 Target의 State가 `healthy`
 
 ### 3-2. API Gateway 엔드포인트 테스트
 
@@ -313,9 +313,9 @@ curl https://mqi4qaw3bb.execute-api.ap-northeast-2.amazonaws.com/api/approvals
 ```
 
 **확인 사항:**
-- ✅ HTTP 200 응답
-- ✅ JSON 형식 응답
-- ✅ 데이터가 올바름
+-  HTTP 200 응답
+-  JSON 형식 응답
+-  데이터가 올바름
 
 **문제 발생 시:**
 ```bash
@@ -329,7 +329,7 @@ kubectl logs -n erp-dev -l app=employee-service --tail=50
 
 ---
 
-## ✅ Phase 4: 롤백 테스트 (10분)
+##  Phase 4: 롤백 테스트 (10분)
 
 ### 4-1. 현재 Revision 확인
 
@@ -382,15 +382,15 @@ helm history erp-microservices -n erp-dev
 ```
 
 **확인 사항:**
-- ✅ 롤백 명령 성공
-- ✅ Pod가 재시작됨
-- ✅ 이미지 태그가 변경됨
-- ✅ Helm 히스토리에 새 Revision 추가됨
-- ✅ API Gateway 테스트 성공
+-  롤백 명령 성공
+-  Pod가 재시작됨
+-  이미지 태그가 변경됨
+-  Helm 히스토리에 새 Revision 추가됨
+-  API Gateway 테스트 성공
 
 ---
 
-## ✅ Phase 5: 최종 확인 (5분)
+##  Phase 5: 최종 확인 (5분)
 
 ### 5-1. 전체 시스템 상태
 
@@ -441,8 +441,8 @@ kubectl get deployment employee-service -n erp-dev -o jsonpath='{.spec.template.
 ```
 
 **확인 사항:**
-- ✅ Git의 tag와 클러스터의 tag가 일치
-- ✅ Git이 진실 (Source of Truth)
+-  Git의 tag와 클러스터의 tag가 일치
+-  Git이 진실 (Source of Truth)
 
 ### 5-3. 최종 체크리스트
 
@@ -474,38 +474,38 @@ kubectl get deployment employee-service -n erp-dev -o jsonpath='{.spec.template.
 
 ---
 
-## 🎉 재구축 완료!
+##  재구축 완료!
 
 ### 개선 사항 요약
 
 **Before (문제):**
-- ❌ 4개 CodePipeline (관리 복잡)
-- ❌ kubectl set image (Manifests 반영 안 됨)
-- ❌ Plain YAML (환경 분리 불가)
-- ❌ Secret 평문 (보안 취약)
-- ❌ NLB 중복 (비용 낭비)
-- ❌ Git이 진실 아님
+-  4개 CodePipeline (관리 복잡)
+-  kubectl set image (Manifests 반영 안 됨)
+-  Plain YAML (환경 분리 불가)
+-  Secret 평문 (보안 취약)
+-  NLB 중복 (비용 낭비)
+-  Git이 진실 아님
 
 **After (해결):**
-- ✅ 1개 CodePipeline (단일 관리)
-- ✅ helm upgrade (Manifests 자동 반영)
-- ✅ Helm Chart (환경 분리 가능)
-- ✅ Secrets Manager (보안 강화)
-- ✅ NLB 1개 (비용 절감)
-- ✅ Git이 진실 (Source of Truth)
+-  1개 CodePipeline (단일 관리)
+-  helm upgrade (Manifests 자동 반영)
+-  Helm Chart (환경 분리 가능)
+-  Secrets Manager (보안 강화)
+-  NLB 1개 (비용 절감)
+-  Git이 진실 (Source of Truth)
 
 ### CodePipeline 강점 극대화
 
-- ✅ AWS Secrets Manager 통합
-- ✅ Parameter Store 활용
-- ✅ ECR 이미지 스캔 자동화
-- ✅ CloudWatch Logs 중앙 집중
-- ✅ 변경 감지 로직 (Git diff)
-- ✅ Helm 배포 (롤백 가능)
+-  AWS Secrets Manager 통합
+-  Parameter Store 활용
+-  ECR 이미지 스캔 자동화
+-  CloudWatch Logs 중앙 집중
+-  변경 감지 로직 (Git diff)
+-  Helm 배포 (롤백 가능)
 
 ---
 
-## 📝 다음 작업 (선택)
+##  다음 작업 (선택)
 
 ### 1. 운영계 환경 추가
 
@@ -542,7 +542,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
 
 ---
 
-## 🎓 학습 포인트
+##  학습 포인트
 
 ### 1. Helm의 가치
 

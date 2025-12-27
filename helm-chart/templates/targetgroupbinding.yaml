@@ -1,0 +1,15 @@
+{{- range $key, $service := .Values.services }}
+{{- if $service.enabled }}
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: {{ $service.name }}-tgb
+  namespace: {{ $.Values.namespace }}
+spec:
+  serviceRef:
+    name: {{ $service.name }}
+    port: {{ $service.port }}
+  targetGroupARN: {{ $service.targetGroupArn }}
+{{- end }}
+{{- end }}

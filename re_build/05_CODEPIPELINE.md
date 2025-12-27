@@ -5,7 +5,7 @@
 
 ---
 
-## 📊 현재 상황
+##  현재 상황
 
 ### 기존 구조 (문제)
 
@@ -47,7 +47,7 @@
 
 ---
 
-## 🚀 Step 1: 기존 CodePipeline 삭제 (10분)
+##  Step 1: 기존 CodePipeline 삭제 (10분)
 
 ### 1-1. AWS Console에서 삭제
 
@@ -91,7 +91,7 @@ aws codepipeline list-pipelines --region ap-northeast-2
 
 ---
 
-## 🔧 Step 2: CodeBuild 프로젝트 생성 (20분)
+##  Step 2: CodeBuild 프로젝트 생성 (20분)
 
 ### 2-1. AWS Console에서 생성
 
@@ -114,7 +114,7 @@ aws codepipeline list-pipelines --region ap-northeast-2
 - Image: `aws/codebuild/standard:7.0`
 - Image version: `Always use the latest image`
 - Environment type: `Linux`
-- Privileged: ✅ **체크 필수** (Docker 빌드 필요)
+- Privileged:  **체크 필수** (Docker 빌드 필요)
 - Service role: `Existing service role`
 - Role ARN: `arn:aws:iam::806332783810:role/erp-dev-codebuild-role`
 
@@ -123,7 +123,7 @@ aws codepipeline list-pipelines --region ap-northeast-2
 - Buildspec name: `buildspec.yml` (루트)
 
 **Logs:**
-- CloudWatch logs: ✅ 체크
+- CloudWatch logs:  체크
 - Group name: `/aws/codebuild/erp-unified-build`
 - Stream name: `build-log`
 
@@ -163,7 +163,7 @@ aws codebuild batch-get-projects \
 - Pipeline name: `erp-unified-pipeline`
 - Service role: `New service role`
 - Role name: `AWSCodePipelineServiceRole-ap-northeast-2-erp-unified`
-- Allow AWS CodePipeline to create a service role: ✅ 체크
+- Allow AWS CodePipeline to create a service role:  체크
 
 **Advanced settings:**
 - Artifact store: `Default location`
@@ -180,7 +180,7 @@ aws codebuild batch-get-projects \
   - GitHub 로그인 → 저장소 선택 → Connect
 - Repository name: `sss654654/erp-microservices`
 - Branch name: `main`
-- Change detection options: `Start the pipeline on source code change` ✅ 체크
+- Change detection options: `Start the pipeline on source code change`  체크
 - Output artifact format: `CodePipeline default`
 
 **Next 클릭**
@@ -285,7 +285,7 @@ aws codepipeline create-pipeline \
 
 ---
 
-## ✅ Step 4: 검증 (10분)
+##  Step 4: 검증 (10분)
 
 ### 4-1. 파이프라인 확인
 
@@ -349,7 +349,7 @@ kubectl get deployment -n erp-dev -o jsonpath='{range .items[*]}{.metadata.name}
 
 ---
 
-## 🧪 Step 5: Git Push 테스트 (10분)
+##  Step 5: Git Push 테스트 (10분)
 
 ### 5-1. 코드 변경
 
@@ -395,7 +395,7 @@ Building employee-service...
 
 ---
 
-## 🔧 트러블슈팅
+##  트러블슈팅
 
 ### 문제 1: GitHub 연결 실패
 
@@ -471,7 +471,7 @@ MAX_RETRIES=60  # 10분으로 증가
 
 ---
 
-## 📊 완료 체크리스트
+##  완료 체크리스트
 
 - [ ] 기존 4개 CodePipeline 삭제
 - [ ] CodeBuild 프로젝트 생성 (`erp-unified-build`)
@@ -485,7 +485,7 @@ MAX_RETRIES=60  # 10분으로 증가
 
 ---
 
-## 🎯 다음 단계
+##  다음 단계
 
 **CodePipeline 생성 완료!**
 
@@ -499,7 +499,7 @@ cat 06_VERIFICATION.md
 
 ---
 
-## 📈 개선 효과
+##  개선 효과
 
 ### Before (4개 파이프라인)
 

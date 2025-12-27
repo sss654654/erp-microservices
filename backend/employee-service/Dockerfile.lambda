@@ -1,0 +1,18 @@
+FROM public.ecr.aws/lambda/java:17
+
+# AWS Lambda Web Adapter 설치
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+
+# JAR 파일 복사
+COPY target/employee-service-1.0.0.jar /var/task/app.jar
+
+# 환경 변수 설정
+ENV AWS_LWA_INVOKE_MODE=response_stream
+ENV AWS_LWA_PORT=8081
+ENV READINESS_CHECK_PORT=8081
+ENV READINESS_CHECK_PATH=/actuator/health
+ENV JAVA_TOOL_OPTIONS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+
+# Spring Boot 실행 (Lambda Web Adapter가 자동으로 처리)
+ENTRYPOINT []
+CMD ["java", "-jar", "/var/task/app.jar"]

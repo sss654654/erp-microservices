@@ -1,11 +1,11 @@
-# 01. Terraform 인프라 배포
+# 02. Terraform 인프라 배포
 
 **소요 시간**: 2시간  
 **목표**: AWS 인프라 전체 구축 (VPC, EKS, RDS, NLB, API Gateway 등)
 
 ---
 
-## 📋 배포 순서 (의존성 기반)
+##  배포 순서 (의존성 기반)
 
 ### 순서가 중요한 이유
 
@@ -33,7 +33,7 @@ VPC → SecurityGroups → IAM → Secrets → Databases → EKS → LoadBalance
 
 ---
 
-## 🚀 Step 1: VPC 배포 (세분화, 15분)
+##  Step 1: VPC 배포 (세분화, 15분)
 
 ### 1-1. VPC 생성
 
@@ -104,7 +104,7 @@ terraform output
 
 ## 🔒 Step 2: Security Groups 배포 (세분화, 10분)
 
-⚠️ **중요:** EKS Security Group은 2단계로 나뉩니다.
+️ **중요:** EKS Security Group은 2단계로 나뉩니다.
 - Step 2-1: EKS SG 생성 (EKS 클러스터 전)
 - Step 5.5: EKS SG 추가 규칙 (EKS 클러스터 후)
 
@@ -124,14 +124,14 @@ cd ../eks-sg
 
 terraform init
 
-# ⚠️ 주의: data "aws_eks_cluster" 부분은 에러 발생
+# ️ 주의: data "aws_eks_cluster" 부분은 에러 발생
 # 일단 기본 Security Group만 생성됨
 terraform apply -auto-approve || echo "Expected error - will fix after EKS creation"
 ```
 
 **예상 동작:**
-- ✅ `aws_security_group.eks` 생성 성공
-- ❌ `aws_security_group_rule.eks_cluster_vpc_ingress` 실패 (EKS 없음)
+-  `aws_security_group.eks` 생성 성공
+-  `aws_security_group_rule.eks_cluster_vpc_ingress` 실패 (EKS 없음)
 - → 정상입니다! Step 5.5에서 다시 실행
 
 ### 2-3. RDS Security Group
@@ -161,7 +161,7 @@ terraform output
 
 ---
 
-## 👤 Step 3: IAM Roles 배포 (통합, 5분)
+##  Step 3: IAM Roles 배포 (통합, 5분)
 
 ```bash
 cd ../../erp-dev-IAM
@@ -173,7 +173,7 @@ terraform apply -auto-approve
 **생성 리소스:**
 - EKS Cluster Role
 - EKS Node Role
-- CodeBuild Role (⚠️ 권한 추가 필요)
+- CodeBuild Role (️ 권한 추가 필요)
 - CodePipeline Role
 
 **확인:**
@@ -184,20 +184,20 @@ terraform output
 # codebuild_role_arn = "arn:aws:iam::xxx:role/erp-dev-codebuild-role"
 ```
 
-### 3-1. CodeBuild Role 권한 추가 (✅ 완료!)
+### 3-1. CodeBuild Role 권한 추가 ( 완료!)
 
 **Terraform 코드에 이미 반영되어 배포 완료:**
-- ✅ Secrets Manager 읽기 (buildspec.yml에서 필요)
-- ✅ Parameter Store 읽기 (buildspec.yml에서 필요)
-- ✅ ECR 이미지 스캔 (buildspec.yml에서 필요)
+-  Secrets Manager 읽기 (buildspec.yml에서 필요)
+-  Parameter Store 읽기 (buildspec.yml에서 필요)
+-  ECR 이미지 스캔 (buildspec.yml에서 필요)
 
 **확인:**
 ```bash
 aws iam list-role-policies --role-name erp-dev-codebuild-role --region ap-northeast-2
 # PolicyNames:
-# - codebuild-secrets-policy ✅
-# - codebuild-ssm-policy ✅
-# - codebuild-ecr-scan-policy ✅
+# - codebuild-secrets-policy 
+# - codebuild-ssm-policy 
+# - codebuild-ecr-scan-policy 
 # - codebuild-ecr-policy
 # - codebuild-eks-policy
 # - codebuild-logs-policy
@@ -212,44 +212,11 @@ aws iam list-role-policies --role-name erp-dev-codebuild-role --region ap-northe
 
 ---
 
-## 🔐 Step 4: Secrets 배포 (통합, 5분)
+##  Step 4: Databases 배포 (세분화, 20분)
 
-```bash
-cd ../erp-dev-Secrets
+### 4-1. RDS MySQL
 
-terraform init
-terraform apply -var="mysql_password=123456789" -auto-approve
-```
-
-**생성 리소스:**
-- AWS Secrets Manager Secret: `erp/dev/mysql`
-- Secret 내용: {username: "admin", password: "123456789", host: RDS endpoint, port: "3306", database: "erp"}
-- EKS Node Role에 Secrets Manager 읽기 권한 추가
-
-**확인:**
-```bash
-terraform output
-# secret_arn = "arn:aws:secretsmanager:ap-northeast-2:806332783810:secret:erp/dev/mysql-xxxxx"
-# secret_name = "erp/dev/mysql"
-
-# Secret 값 확인
-aws secretsmanager get-secret-value \
-  --secret-id erp/dev/mysql \
-  --region ap-northeast-2 \
-  --query SecretString \
-  --output text
-# {"username":"admin","password":"123456789","host":"erp-dev-mysql.xxx.rds.amazonaws.com","port":"3306","database":"erp"}
-```
-
-**⚠️ 중요:**
-- Secret 이름: `erp/dev/mysql` (가이드에서 `prod/rds/password`로 잘못 작성된 부분 있음)
-- MongoDB Secret은 없음 (Atlas 사용, 외부 관리)
-
----
-
-## 💾 Step 5: Databases 배포 (세분화, 20분)
-
-### 5-1. RDS MySQL
+**중요: RDS는 이미 ASM Secret을 읽어서 생성됩니다.**
 
 ```bash
 cd ../erp-dev-Databases/rds
@@ -263,6 +230,7 @@ terraform apply -auto-approve
 - Single-AZ
 - 20GB gp3 Storage
 - Data Subnet
+- **비밀번호는 ASM `erp/dev/mysql`에서 자동으로 읽어옴**
 
 **확인:**
 ```bash
@@ -270,9 +238,9 @@ terraform output
 # endpoint = "erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com"
 ```
 
-**⏰ 대기 시간: 약 10분**
+** 대기 시간: 약 10분**
 
-### 5-2. ElastiCache Redis
+### 4-2. ElastiCache Redis
 
 ```bash
 cd ../elasticache
@@ -292,11 +260,11 @@ terraform output
 # endpoint = "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
 ```
 
-**⏰ 대기 시간: 약 5분**
+** 대기 시간: 약 5분**
 
 ---
 
-## ☸️ Step 6: EKS 배포 (통합, 30분)
+## ️ Step 5: EKS 배포 (통합, 30분)
 
 ```bash
 cd ../../erp-dev-EKS
@@ -319,7 +287,7 @@ terraform output
 # cluster_endpoint = "https://xxx.eks.ap-northeast-2.amazonaws.com"
 ```
 
-**⏰ 대기 시간: 약 15분**
+** 대기 시간: 약 15분**
 
 **kubeconfig 설정:**
 ```bash
@@ -335,7 +303,7 @@ kubectl get nodes
 
 ---
 
-## 🔧 Step 7: Load Balancer Controller 배포 (단일, 10분)
+##  Step 6: Load Balancer Controller 배포 (단일, 10분)
 
 ```bash
 cd ../erp-dev-LoadBalancerController
@@ -357,7 +325,7 @@ kubectl get pods -n kube-system | grep aws-load-balancer-controller
 
 ---
 
-## 🌐 Step 8: API Gateway 배포 (통합, 15분)
+##  Step 7: API Gateway 배포 (통합, 15분)
 
 ```bash
 cd ../erp-dev-APIGateway
@@ -383,7 +351,7 @@ terraform output
 
 ---
 
-## 🎨 Step 9: Frontend 배포 (통합, 10분)
+##  Step 8: Frontend 배포 (통합, 10분)
 
 ```bash
 cd ../erp-dev-Frontend
@@ -405,7 +373,7 @@ terraform output
 
 ---
 
-## 🔐 Step 10: Cognito 배포 (통합, 5분)
+##  Step 9: Cognito 배포 (통합, 5분)
 
 ```bash
 cd ../erp-dev-Cognito
@@ -427,7 +395,7 @@ terraform output
 
 ---
 
-## ✅ 최종 확인
+##  최종 확인
 
 ### 모든 리소스 확인
 
@@ -484,7 +452,7 @@ var.vpc_id 입력 대기
 ```
 
 **해결:**
-- ✅ 이미 수정 완료: variables.tf에서 vpc_id 제거, remote state 사용
+-  이미 수정 완료: variables.tf에서 vpc_id 제거, remote state 사용
 
 ### 문제 3: APIGateway - 하드코딩된 Security Group
 
@@ -494,7 +462,7 @@ Error: security group 'sg-0a13cde3743d6ead9' does not exist
 ```
 
 **해결:**
-- ✅ 이미 수정 완료: remote state에서 ALB SG 가져오도록 변경
+-  이미 수정 완료: remote state에서 ALB SG 가져오도록 변경
 
 ### 문제 4: Frontend - S3 Bucket Already Exists
 
@@ -510,7 +478,7 @@ terraform import module.s3.aws_s3_bucket.frontend erp-dev-frontend-dev
 
 ---
 
-## 📊 배포 완료 체크리스트
+##  배포 완료 체크리스트
 
 - [x] VPC 생성 완료 (vpc-064dc3c3fab271278)
 - [x] Subnet 6개 생성 완료 (Public x2, Private x2, Data x2)
@@ -527,12 +495,12 @@ terraform import module.s3.aws_s3_bucket.frontend erp-dev-frontend-dev
 - [x] Frontend S3, CloudFront 생성 완료 (d3goird6ndqlnv.cloudfront.net)
 - [x] Cognito User Pool 생성 완료 (ap-northeast-2_OZneAVLnb)
 
-**✅ Phase 1 Terraform 배포 100% 완료**
-**✅ Phase 2-7 진행 준비 완료**
+** Phase 1 Terraform 배포 100% 완료**
+** Phase 2-7 진행 준비 완료**
 
 ---
 
-## 📝 중요 정보 저장
+##  중요 정보 저장
 
 **다음 단계에서 필요한 정보를 저장하세요:**
 
@@ -569,16 +537,16 @@ cat terraform-outputs.txt
 
 ---
 
-## 🎯 다음 단계
+##  다음 단계
 
 **Terraform 배포 완료!**
 
 **다음 파일을 읽으세요:**
-→ **02_HELM_CHART.md**
+→ **03_HELM_CHART.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 02_HELM_CHART.md
+cat 03_HELM_CHART.md
 ```
 
 ---

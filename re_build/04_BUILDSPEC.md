@@ -5,22 +5,22 @@
 
 ---
 
-## 🎯 CodePipeline 강점 극대화
+##  CodePipeline 강점 극대화
 
 ### CGV와 차별화
 
 | 기능 | CGV (GitLab CI) | ERP (CodePipeline) |
 |------|----------------|-------------------|
-| Secret 관리 | GitLab Variables | AWS Secrets Manager ✅ |
-| 설정 관리 | .gitlab-ci.yml 하드코딩 | Parameter Store ✅ |
-| 이미지 스캔 | 수동 | ECR 자동 스캔 ✅ |
-| 로그 관리 | GitLab Logs | CloudWatch Logs ✅ |
-| 트레이싱 | 없음 | X-Ray 통합 ✅ |
-| 변경 감지 | 전체 빌드 | Git diff로 선택 빌드 ✅ |
+| Secret 관리 | GitLab Variables | AWS Secrets Manager  |
+| 설정 관리 | .gitlab-ci.yml 하드코딩 | Parameter Store  |
+| 이미지 스캔 | 수동 | ECR 자동 스캔  |
+| 로그 관리 | GitLab Logs | CloudWatch Logs  |
+| 트레이싱 | 없음 | X-Ray 통합  |
+| 변경 감지 | 전체 빌드 | Git diff로 선택 빌드  |
 
 ---
 
-## 📊 현재 문제점 분석
+##  현재 문제점 분석
 
 ### 문제 1: 4개 buildspec.yml 중복
 
@@ -68,7 +68,7 @@ post_build:
 
 ---
 
-## 🚀 Step 1: 루트에 buildspec.yml 생성 (30분)
+##  Step 1: 루트에 buildspec.yml 생성 (30분)
 
 ### 1-1. 파일 생성
 
@@ -315,7 +315,7 @@ EOF
 
 ---
 
-## 📝 Step 2: Parameter Store 생성 (10분)
+##  Step 2: Parameter Store 생성 (10분)
 
 ### 2-1. AWS CLI로 생성
 
@@ -372,7 +372,7 @@ aws ssm get-parameters \
 
 ---
 
-## 🔧 Step 3: IAM 권한 추가 (10분)
+##  Step 3: IAM 권한 추가 (10분)
 
 ### 3-1. CodeBuild Role에 권한 추가
 
@@ -488,7 +488,7 @@ aws iam put-role-policy \
 
 ---
 
-## ✅ Step 4: 검증 (20분)
+##  Step 4: 검증 (20분)
 
 ### 4-1. 로컬 테스트 (Dry-run)
 
@@ -537,7 +537,7 @@ git commit -m "Unified buildspec.yml with CodePipeline strengths"
 
 ---
 
-## 📊 완료 체크리스트
+##  완료 체크리스트
 
 - [ ] 루트에 buildspec.yml 생성
 - [ ] Parameter Store 4개 생성 (account-id, region, cluster-name, repository-prefix)
@@ -550,7 +550,7 @@ git commit -m "Unified buildspec.yml with CodePipeline strengths"
 
 ---
 
-## 🎯 다음 단계
+##  다음 단계
 
 **buildspec.yml 작성 완료!**
 
@@ -564,7 +564,7 @@ cat 05_CODEPIPELINE.md
 
 ---
 
-## 🔍 주요 개선 사항
+##  주요 개선 사항
 
 ### 1. 변경 감지 로직
 

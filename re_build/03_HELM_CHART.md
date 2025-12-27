@@ -1,11 +1,238 @@
-# 02. Helm Chart 생성
+# 03. Helm Chart 생성
 
 **소요 시간**: 2시간  
 **목표**: Plain YAML → Helm Chart 전환 (환경 분리, 템플릿 재사용)
 
 ---
 
-## 📊 현재 문제점 분석
+## EKS Node 구조 설계
+
+### 최종 Node 배치 (4개 Node, 2개 AZ)
+
+**Node Group 1 (서비스용, 2개):**
+```
+ap-northeast-2a: 1개 Node (Taint 없음)
+ap-northeast-2c: 1개 Node (Taint 없음)
+```
+
+**Node Group 2 (Kafka 전용, 2개):**
+```
+ap-northeast-2a: 1개 Node (Taint: workload=kafka:NoSchedule)
+ap-northeast-2c: 1개 Node (Taint: workload=kafka:NoSchedule)
+```
+
+### Pod 배치 전략
+
+**서비스 Pod (8개):**
+- Anti-Affinity로 2개 AZ에 균등 분산
+- Kafka Node는 Taint 때문에 접근 불가
+```
+서비스 Node (2a): employee, approval-request, approval-processing, notification (각 1개)
+서비스 Node (2c): employee, approval-request, approval-processing, notification (각 1개)
+```
+
+**Kafka + Zookeeper (4개):**
+- nodeSelector + Toleration으로 Kafka Node로만 배치
+- Anti-Affinity로 2개 AZ에 균등 분산
+```
+Kafka Node (2a): Kafka Pod 1, Zookeeper Pod 1
+Kafka Node (2c): Kafka Pod 2, Zookeeper Pod 2
+```
+
+### 격리 메커니즘
+
+**Taint (Node에 설정):**
+- Kafka Node에 `workload=kafka:NoSchedule` Taint 추가
+- 서비스 Pod는 Toleration 없어서 Kafka Node 접근 불가
+
+**Toleration (Kafka Pod에 설정):**
+- Kafka/Zookeeper만 Toleration 있어서 Kafka Node 접근 가능
+
+**nodeSelector (Kafka Pod에 설정):**
+- Kafka/Zookeeper는 `workload: kafka` 레이블 있는 Node로만 이동
+
+**결과: 완벽한 격리**
+
+---
+
+##  기초 개념 이해
+
+### 현재 구조 (Before)
+
+**1. manifests 폴더 (Plain YAML)**
+```
+manifests/
+├── base/
+│   ├── configmap.yaml          # 공통 환경 변수 (하드코딩)
+│   ├── secret.yaml             # 비밀번호 (평문)
+│   └── targetgroupbinding.yaml # NLB 연결 (4개 서비스)
+├── employee/
+│   ├── employee-deployment.yaml      # Pod 생성 방법
+│   ├── employee-service.yaml         # 네트워크 설정
+│   └── employee-service-hpa.yaml     # Auto Scaling
+├── approval-request/
+│   └── ... (employee와 거의 동일)
+├── approval-processing/
+│   └── ... (employee와 거의 동일)
+└── notification/
+    └── ... (employee와 거의 동일)
+```
+
+**문제점:**
+- 4개 서비스 파일이 거의 동일 (중복 400줄)
+- 개발계/운영계 분리 불가 (하드코딩)
+- 비밀번호가 Git에 평문으로 저장
+
+**2. backend 폴더 (4개 buildspec.yml)**
+```
+backend/
+├── employee-service/buildspec.yml
+├── approval-request-service/buildspec.yml
+├── approval-processing-service/buildspec.yml
+└── notification-service/buildspec.yml
+```
+
+**각 buildspec.yml 내용 (거의 동일):**
+```yaml
+phases:
+  pre_build:
+    - ECR 로그인
+    - kubeconfig 업데이트
+  build:
+    - mvn clean package
+    - docker build
+  post_build:
+    - docker push
+    - kubectl set image deployment/서비스명 ...  # ️ 이미지만 변경!
+```
+
+**문제점:**
+- `kubectl set image`는 이미지만 변경
+- manifests 파일 변경 (replicas, resources 등)은 반영 안 됨
+- 4개 파일 중복
+
+---
+
+### Helm Chart 구조 (After)
+
+**1. helm-chart 폴더 (템플릿 + 설정 분리)**
+```
+helm-chart/
+├── Chart.yaml              # Helm Chart 메타데이터
+├── values-dev.yaml         # 개발계 설정 (변수)
+├── values-prod.yaml        # 운영계 설정 (미래)
+└── templates/              # 템플릿 (재사용)
+    ├── deployment.yaml     # 4개 서비스 통합 템플릿
+    ├── service.yaml        # 4개 서비스 통합 템플릿
+    └── ...
+```
+
+**핵심 개념:**
+
+**템플릿 (templates/):**
+- Go 템플릿 문법 사용
+- `{{ .Values.xxx }}` 형태로 변수 참조
+- 1개 파일로 4개 서비스 생성 가능
+
+**예시:**
+```yaml
+# templates/deployment.yaml (1개 파일)
+{{- range $key, $service := .Values.services }}  # 서비스 개수만큼 반복
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $service.name }}  # employee-service, approval-request-service...
+spec:
+  replicas: {{ $service.replicaCount }}  # values-dev.yaml에서 가져옴
+  template:
+    spec:
+      containers:
+      - image: "{{ $service.image.repository }}:{{ $service.image.tag }}"
+        resources:
+          {{- toYaml $service.resources | nindent 10 }}  # values에서 가져옴
+{{- end }}
+```
+
+**설정 파일 (values-dev.yaml):**
+- 환경별로 다른 값 저장
+- 템플릿에서 `{{ .Values.xxx }}`로 참조
+
+**예시:**
+```yaml
+# values-dev.yaml (개발계)
+services:
+  employee:
+    name: employee-service
+    replicaCount: 2           # 개발계는 2개
+    image:
+      repository: xxx/employee-service
+      tag: latest
+    resources:
+      limits:
+        memory: 512Mi         # 개발계는 512Mi
+
+# values-prod.yaml (운영계)
+services:
+  employee:
+    replicaCount: 5           # 운영계는 5개
+    resources:
+      limits:
+        memory: 2Gi           # 운영계는 2Gi
+```
+
+**결과:**
+- 1개 템플릿 → 4개 Deployment 생성
+- 환경별 설정 분리 (dev/prod)
+- 중복 코드 제거 (400줄 → 100줄)
+
+---
+
+### buildspec.yml 변화 (Phase 4에서 구현)
+
+**Before (4개 파일):**
+```yaml
+# backend/employee-service/buildspec.yml
+post_build:
+  - kubectl set image deployment/employee-service ...  # 이미지만 변경
+```
+
+**After (1개 파일):**
+```yaml
+# 루트/buildspec.yml
+post_build:
+  - helm upgrade --install erp-microservices helm-chart/ \
+      -f helm-chart/values-dev.yaml  # 전체 리소스 배포
+```
+
+**차이점:**
+- `kubectl set image`: 이미지만 변경 (Deployment의 나머지는 그대로)
+- `helm upgrade`: 전체 리소스 재배포 (Deployment, Service, HPA 모두 반영)
+
+**예시:**
+```yaml
+# values-dev.yaml 수정
+services:
+  employee:
+    replicaCount: 2 → 5  # Pod 개수 변경
+    resources:
+      limits:
+        memory: 512Mi → 1Gi  # 메모리 변경
+```
+
+```bash
+# Git Push 후 CodePipeline 실행
+helm upgrade ...  # ← values-dev.yaml 변경사항이 자동 반영됨!
+```
+
+**결과:**
+- Git이 진실 (Source of Truth)
+- manifests 변경이 자동 반영
+- 롤백 가능 (`helm rollback`)
+
+---
+
+##  현재 문제점 분석
 
 ### 문제 1: Plain YAML (환경 분리 불가)
 
@@ -28,10 +255,10 @@ manifests/
 ```
 
 **문제:**
-- ❌ 환경별 설정 분리 불가 (개발계/운영계)
-- ❌ 4개 Deployment 파일 중복 (400줄 중 300줄 중복)
-- ❌ 하드코딩된 값 (replicas, image, resources)
-- ❌ 버전 관리 어려움 (배포 히스토리 없음)
+-  환경별 설정 분리 불가 (개발계/운영계)
+-  4개 Deployment 파일 중복 (400줄 중 300줄 중복)
+-  하드코딩된 값 (replicas, image, resources)
+-  버전 관리 어려움 (배포 히스토리 없음)
 
 **실제 파일 확인:**
 ```yaml
@@ -54,13 +281,13 @@ spec:
 # manifests/base/secret.yaml
 stringData:
   MYSQL_USERNAME: "admin"
-  MYSQL_PASSWORD: "123456789"  # ⚠️ Git에 평문 커밋
+  MYSQL_PASSWORD: "123456789"  # ️ Git에 평문 커밋
 ```
 
 **문제:**
-- ❌ 비밀번호가 Git에 노출
-- ❌ AWS Secrets Manager 미사용
-- ❌ 실무에서 절대 금지
+-  비밀번호가 Git에 노출
+-  AWS Secrets Manager 미사용
+-  실무에서 절대 금지
 
 ### 문제 3: LoadBalancer 중복
 
@@ -68,17 +295,17 @@ stringData:
 ```yaml
 # manifests/notification/notification-service.yaml
 spec:
-  type: LoadBalancer  # ⚠️ 추가 NLB 생성
+  type: LoadBalancer  # ️ 추가 NLB 생성
 ```
 
 **문제:**
-- ❌ Terraform NLB + Kubernetes LoadBalancer = NLB 2개
-- ❌ 비용 낭비 ($16/월)
-- ❌ 일관성 없음
+-  Terraform NLB + Kubernetes LoadBalancer = NLB 2개
+-  비용 낭비 ($16/월)
+-  일관성 없음
 
 ---
 
-## 🎯 Helm Chart로 해결
+##  Helm Chart로 해결
 
 ### 해결 방법
 
@@ -131,7 +358,7 @@ spec:
 
 ---
 
-## 📋 Helm Chart 구조
+##  Helm Chart 구조
 
 ```
 helm-chart/
@@ -151,7 +378,7 @@ helm-chart/
 
 ---
 
-## 🚀 Step 1: 폴더 생성 (5분)
+##  Step 1: 폴더 생성 (5분)
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project
@@ -195,7 +422,7 @@ secretsManager:
   region: ap-northeast-2
   secrets:
     rds:
-      name: erp/dev/mysql  # ✅ Terraform이 생성한 실제 Secret 이름
+      name: erp/dev/mysql  #  Terraform이 생성한 실제 Secret 이름
       keys:
         - username
         - password
@@ -234,7 +461,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/8c464cb6e6f397e8"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/665fd67efb37d9fb"
     env:
       - name: SPRING_DATA_MONGODB_URI
         valueFrom:
@@ -269,7 +496,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/da60a92bb21c56b1"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/0bd3707f32e721cd"
     env:
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
         value: "kafka.erp-dev.svc.cluster.local:9092"
@@ -295,7 +522,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/fbc2202e0ce36323"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/e8df94d1784737ee"
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com:3306/erp?useSSL=true"
@@ -331,7 +558,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/25d73a1f55aaeaff"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/671f2eb0a241a3f2"
     env:
       - name: REDIS_HOST
         value: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
@@ -415,7 +642,7 @@ spec:
 EOF
 ```
 
-**⚠️ MongoDB Secret 제거:**
+**️ MongoDB Secret 제거:**
 - MongoDB는 Atlas 사용 (외부 관리)
 - Secrets Manager에 저장 불필요
 - ConfigMap에 URI 하드코딩 (개발 환경)
@@ -676,7 +903,7 @@ EOF
 
 ---
 
-## ✅ Step 5: 검증 (10분)
+##  Step 5: 검증 (10분)
 
 ### 5-1. Helm Lint
 
@@ -724,7 +951,7 @@ grep -c "kind: TargetGroupBinding" test-output.yaml
 
 ---
 
-## 📊 완료 체크리스트
+##  완료 체크리스트
 
 - [ ] helm-chart/ 폴더 생성
 - [ ] Chart.yaml 작성
@@ -742,16 +969,16 @@ grep -c "kind: TargetGroupBinding" test-output.yaml
 
 ---
 
-## 🎯 다음 단계
+##  다음 단계
 
 **Helm Chart 생성 완료!**
 
 **다음 파일을 읽으세요:**
-→ **03_SECRETS_SETUP.md**
+→ **03.5_LAMBDA.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 03_SECRETS_SETUP.md
+cat 03.5_LAMBDA.md
 ```
 
 ---

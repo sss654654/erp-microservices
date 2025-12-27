@@ -37,3 +37,21 @@ resource "aws_iam_role_policy_attachment" "eks_ssm_managed_instance_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   role       = aws_iam_role.eks_node.name
 }
+
+# Secrets Manager 읽기 권한
+resource "aws_iam_role_policy" "eks_node_secrets_manager" {
+  role = aws_iam_role.eks_node.name
+  name = "eks-node-secrets-manager-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ]
+      Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.project_name}/*"
+    }]
+  })
+}

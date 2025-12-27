@@ -47,3 +47,5 @@ manifests/secret.yaml
 
 # Reports
 제출보고서/
+secrets/
+re_build/mysql-secret.json

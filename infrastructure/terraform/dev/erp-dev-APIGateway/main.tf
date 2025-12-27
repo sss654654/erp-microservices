@@ -91,6 +91,10 @@ output "api_endpoint" {
   value = module.api_gateway.api_endpoint
 }
 
+output "api_id" {
+  value = module.api_gateway.api_id
+}
+
 output "nlb_dns_name" {
   value = module.nlb.nlb_dns_name
 }

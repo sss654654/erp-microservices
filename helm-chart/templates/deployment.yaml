@@ -1,0 +1,65 @@
+{{- range $key, $service := .Values.services }}
+{{- if $service.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $service.name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ $service.name }}
+spec:
+  replicas: {{ $service.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $service.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $service.name }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ $service.name }}
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+      - name: {{ $service.name }}
+        image: "{{ $service.image.repository }}:{{ $service.image.tag }}"
+        imagePullPolicy: {{ $service.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        ports:
+        - containerPort: {{ $service.port }}
+          name: http
+        resources:
+          {{- toYaml $service.resources | nindent 10 }}
+        {{- if $service.env }}
+        env:
+          {{- toYaml $service.env | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: {{ $service.port }}
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: {{ $service.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 5
+{{- end }}
+{{- end }}

@@ -33,15 +33,3 @@ variable "mysql_database_name" {
   type        = string
   default     = "erp"
 }
-
-variable "mysql_username" {
-  description = "MySQL username"
-  type        = string
-  default     = "admin"
-}
-
-variable "mysql_password" {
-  description = "MySQL password"
-  type        = string
-  sensitive   = true
-}

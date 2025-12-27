@@ -1,0 +1,177 @@
+# 개발 환경 설정
+namespace: erp-dev
+
+# AWS Secrets Manager 설정
+secretsManager:
+  enabled: true
+  region: ap-northeast-2
+  secrets:
+    rds:
+      name: erp/dev/mysql
+      keys:
+        - username
+        - password
+        - host
+        - port
+        - database
+
+# 공통 설정
+config:
+  mongodbUri: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
+  redisHost: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
+  redisPort: "6379"
+  kafkaBootstrapServers: "kafka.erp-dev.svc.cluster.local:9092"
+
+# 서비스별 설정
+services:
+  approvalRequest:
+    enabled: true
+    name: approval-request-service
+    replicaCount: 2
+    image:
+      repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-request-service
+      tag: latest
+      pullPolicy: Always
+    port: 8082
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 70
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/665fd67efb37d9fb"
+    env:
+      - name: SPRING_DATA_MONGODB_URI
+        value: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
+      - name: EMPLOYEE_SERVICE_URL
+        value: "http://employee-service:8081"
+      - name: NOTIFICATION_SERVICE_URL
+        value: "http://notification-service:8084"
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: "kafka.erp-dev.svc.cluster.local:9092"
+  
+  approvalProcessing:
+    enabled: true
+    name: approval-processing-service
+    replicaCount: 2
+    image:
+      repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-processing-service
+      tag: latest
+      pullPolicy: Always
+    port: 8083
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 70
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/0bd3707f32e721cd"
+    env:
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: "kafka.erp-dev.svc.cluster.local:9092"
+  
+  employee:
+    enabled: false  # Lambda로 전환
+    name: employee-service
+    replicaCount: 2
+    image:
+      repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service
+      tag: latest
+      pullPolicy: Always
+    port: 8081
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 70
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/e8df94d1784737ee"
+    env:
+      - name: SPRING_DATASOURCE_URL
+        value: "jdbc:mysql://erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com:3306/erp?useSSL=true"
+      - name: SPRING_DATASOURCE_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: rds-secret
+            key: username
+      - name: SPRING_DATASOURCE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: rds-secret
+            key: password
+  
+  notification:
+    enabled: true
+    name: notification-service
+    replicaCount: 2
+    image:
+      repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/notification-service
+      tag: latest
+      pullPolicy: Always
+    port: 8084
+    resources:
+      requests:
+        cpu: 150m
+        memory: 200Mi
+      limits:
+        cpu: 400m
+        memory: 300Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 70
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/671f2eb0a241a3f2"
+    env:
+      - name: REDIS_HOST
+        value: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
+      - name: REDIS_PORT
+        value: "6379"
+
+# Kafka 설정
+kafka:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: confluentinc/cp-kafka
+    tag: 7.5.0
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# Zookeeper 설정
+zookeeper:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: confluentinc/cp-zookeeper
+    tag: 7.5.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi

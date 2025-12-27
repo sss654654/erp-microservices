@@ -1,20 +1,20 @@
-# 🚀 ERP 프로젝트 재구축 마스터 가이드
+#  ERP 프로젝트 재구축 마스터 가이드
 
 **작성일**: 2024-12-27  
 **목적**: 처음부터 끝까지 완벽한 재구축 (CodePipeline 강점 극대화)
 
 ---
 
-## 📋 이 가이드를 읽는 방법
+##  이 가이드를 읽는 방법
 
 ### 파일 구조
 ```
 re_build/
 ├── 00_START_HERE.md           # ← 지금 읽는 파일 (전체 개요)
-├── 01_TERRAFORM.md             # Terraform 배포 (2시간)
-├── 02_HELM_CHART.md            # Helm Chart 생성 (2시간)
-├── 02.5_LAMBDA.md              # Lambda 전환 (2시간) ← NEW
-├── 03_SECRETS_SETUP.md         # Secrets Manager 설정 (30분)
+├── 01_SECRETS_SETUP.md         # Secrets Manager 설정 (먼저!)
+├── 02_TERRAFORM.md             # Terraform 배포 (2시간)
+├── 03_HELM_CHART.md            # Helm Chart 생성 (2시간)
+├── 03.5_LAMBDA.md              # Lambda 전환 (2시간) ← NEW
 ├── 04_BUILDSPEC.md             # buildspec.yml 작성 (1시간)
 ├── 05_CODEPIPELINE.md          # CodePipeline 생성 (1시간)
 └── 06_VERIFICATION.md          # 검증 및 테스트 (1시간)
@@ -22,57 +22,64 @@ re_build/
 
 ### 읽는 순서
 1. **00_START_HERE.md** (이 파일) - 전체 흐름 이해
-2. **01_TERRAFORM.md** - Terraform 배포 시작
-3. **02_HELM_CHART.md** - Helm Chart 생성
-4. **02.5_LAMBDA.md** - Employee Service Lambda 전환 ← NEW
-5. **03_SECRETS_SETUP.md** - Secrets Manager 설정
+2. **01_SECRETS_SETUP.md** - Secrets Manager 설정 (먼저!)
+3. **02_TERRAFORM.md** - Terraform 배포 시작
+4. **03_HELM_CHART.md** - Helm Chart 생성
+5. **03.5_LAMBDA.md** - Employee Service Lambda 전환
 6. **04_BUILDSPEC.md** - buildspec.yml 작성
 7. **05_CODEPIPELINE.md** - CodePipeline 생성
 8. **06_VERIFICATION.md** - 검증 및 테스트
 
 ---
 
-## 🎯 재구축 목표
+##  재구축 목표
 
 ### 해결할 문제점
 
 **현재 문제:**
-1. ❌ 서비스별 CodePipeline (4개)
-2. ❌ kubectl set image만 실행 (Manifests 변경 반영 안 됨)
-3. ❌ Plain YAML (환경 분리 불가)
-4. ❌ Secret 평문 하드코딩
-5. ❌ NLB 중복 생성
-6. ❌ Git이 진실이 아님
+1.  서비스별 CodePipeline (4개)
+2.  kubectl set image만 실행 (Manifests 변경 반영 안 됨)
+3.  Plain YAML (환경 분리 불가)
+4.  Secret 평문 하드코딩
+5.  NLB 중복 생성
+6.  Git이 진실이 아님
 
 **재구축 후:**
-1. ✅ 단일 CodePipeline
-2. ✅ helm upgrade (전체 리소스 배포)
-3. ✅ Helm Chart (환경 분리 가능)
-4. ✅ AWS Secrets Manager 통합
-5. ✅ NLB 1개로 통일
-6. ✅ Git이 진실
+1.  단일 CodePipeline
+2.  helm upgrade (전체 리소스 배포)
+3.  Helm Chart (환경 분리 가능)
+4.  AWS Secrets Manager 통합
+5.  NLB 1개로 통일
+6.  Git이 진실
 
 ### CodePipeline 강점 극대화
 
 **CGV와 차별화:**
-1. ✅ AWS Secrets Manager 통합
-2. ✅ Parameter Store 활용
-3. ✅ CodeBuild 환경 변수 암호화
-4. ✅ ECR 이미지 스캔 자동화
-5. ✅ CloudWatch Logs 중앙 집중
-6. ✅ X-Ray 트레이싱 통합
-7. ✅ 단일 파이프라인 + Helm Chart
+1.  AWS Secrets Manager 통합
+2.  Parameter Store 활용
+3.  CodeBuild 환경 변수 암호화
+4.  ECR 이미지 스캔 자동화
+5.  CloudWatch Logs 중앙 집중
+6.  X-Ray 트레이싱 통합
+7.  단일 파이프라인 + Helm Chart
 
 ---
 
-## 📊 전체 흐름도
+##  전체 흐름도
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 1: Terraform 배포 (2시간)                              │
+│ Phase 1: Secrets Manager 설정 (30분)                         │
+│ - RDS 비밀번호 저장                                          │
+│ - External Secrets Operator 설치                            │
+│ - SecretStore 생성                                           │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 2: Terraform 배포 (2시간)                              │
 │ - VPC, Subnet, Security Groups                              │
 │ - IAM Roles                                                  │
-│ - RDS, ElastiCache                                           │
+│ - RDS (ASM에서 비밀번호 읽음), ElastiCache                   │
 │ - EKS Cluster, Node Group                                    │
 │ - NLB, API Gateway                                           │
 │ - Frontend (S3, CloudFront)                                  │
@@ -80,7 +87,7 @@ re_build/
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 2: Helm Chart 생성 (2시간)                             │
+│ Phase 3: Helm Chart 생성 (2시간)                             │
 │ - Chart.yaml                                                 │
 │ - values-dev.yaml (환경별 설정)                              │
 │ - templates/ (Deployment, Service, HPA 등)                   │
@@ -88,11 +95,9 @@ re_build/
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 3: Secrets Manager 설정 (30분)                         │
-│ - RDS 비밀번호 저장                                          │
-│ - MongoDB URI 저장                                           │
-│ - External Secrets Operator 설치                            │
-│ - SecretStore 생성                                           │
+│ Phase 3.5: Lambda 전환 (2시간)                               │
+│ - Employee Service를 Lambda로 전환                           │
+│ - 비용 21% 절감                                              │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -124,14 +129,14 @@ re_build/
 
 ---
 
-## ⏱️ 예상 소요 시간
+## ⏱ 예상 소요 시간
 
 | Phase | 작업 | 소요 시간 |
 |-------|------|----------|
-| Phase 1 | Terraform 배포 | 2시간 |
-| Phase 2 | Helm Chart 생성 | 2시간 |
-| Phase 2.5 | Lambda 전환 (Employee Service) | 2시간 |
-| Phase 3 | Secrets Manager 설정 | 30분 |
+| Phase 1 | Secrets Manager 설정 | 30분 |
+| Phase 2 | Terraform 배포 | 2시간 |
+| Phase 3 | Helm Chart 생성 | 2시간 |
+| Phase 3.5 | Lambda 전환 (Employee Service) | 2시간 |
 | Phase 4 | buildspec.yml 작성 | 1시간 |
 | Phase 5 | CodePipeline 생성 | 1시간 |
 | Phase 6 | 검증 및 테스트 | 1시간 |
@@ -141,7 +146,7 @@ re_build/
 
 ---
 
-## 🔑 핵심 개념
+##  핵심 개념
 
 ### 1. Terraform 세분화 vs 통합
 
@@ -238,9 +243,15 @@ git push origin backup-before-rebuild
 
 ---
 
-## 📝 체크리스트
+##  체크리스트
 
-### Phase 1: Terraform
+### Phase 1: Secrets Manager
+- [ ] AWS Secrets Manager에 Secret 생성
+- [ ] External Secrets Operator 설치
+- [ ] SecretStore 생성
+- [ ] ExternalSecret 테스트 성공
+
+### Phase 2: Terraform
 - [ ] VPC 배포 완료
 - [ ] Security Groups 배포 완료
 - [ ] IAM Roles 배포 완료
@@ -249,26 +260,20 @@ git push origin backup-before-rebuild
 - [ ] NLB, API Gateway 배포 완료
 - [ ] Frontend 배포 완료
 
-### Phase 2: Helm Chart
+### Phase 3: Helm Chart
 - [ ] Chart.yaml 작성
 - [ ] values-dev.yaml 작성 (employee 제외)
 - [ ] templates/ 8개 파일 작성
 - [ ] helm lint 통과
 - [ ] helm template 출력 확인
 
-### Phase 2.5: Lambda 전환
+### Phase 3.5: Lambda 전환
 - [ ] Terraform Lambda 모듈 생성
 - [ ] Dockerfile.lambda 생성
 - [ ] pom.xml Lambda 의존성 추가
 - [ ] Terraform apply 성공
 - [ ] Lambda 이미지 빌드 및 푸시
 - [ ] API Gateway 테스트 성공
-
-### Phase 3: Secrets Manager
-- [ ] RDS Secret 생성
-- [ ] MongoDB Secret 생성
-- [ ] External Secrets Operator 설치
-- [ ] SecretStore 생성
 
 ### Phase 4: buildspec.yml
 - [ ] Secrets Manager 통합
@@ -297,12 +302,12 @@ git push origin backup-before-rebuild
 ## 🎬 시작하기
 
 **다음 파일을 읽으세요:**
-→ **01_TERRAFORM.md**
+→ **01_SECRETS_SETUP.md**
 
 **명령어:**
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 01_TERRAFORM.md
+cat 01_SECRETS_SETUP.md
 ```
 
 ---
