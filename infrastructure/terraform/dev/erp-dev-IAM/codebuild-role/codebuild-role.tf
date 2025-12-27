@@ -18,6 +18,12 @@ resource "aws_iam_role" "codebuild" {
   }
 }
 
+# Get current AWS account ID
+data "aws_caller_identity" "current" {}
+
+# Get current AWS region
+data "aws_region" "current" {}
+
 resource "aws_iam_role_policy" "codebuild_ecr" {
   role = aws_iam_role.codebuild.id
   name = "codebuild-ecr-policy"
@@ -107,6 +113,60 @@ resource "aws_iam_role_policy" "codebuild_codeconnections" {
         "codeconnections:GetConnection"
       ]
       Resource = "arn:aws:codeconnections:ap-northeast-2:*:connection/*"
+    }]
+  })
+}
+
+# Secrets Manager 읽기 권한 (buildspec.yml에서 필요)
+resource "aws_iam_role_policy" "codebuild_secrets" {
+  role = aws_iam_role.codebuild.id
+  name = "codebuild-secrets-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ]
+      Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:erp/*"
+    }]
+  })
+}
+
+# Parameter Store 읽기 권한 (buildspec.yml에서 필요)
+resource "aws_iam_role_policy" "codebuild_ssm" {
+  role = aws_iam_role.codebuild.id
+  name = "codebuild-ssm-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ]
+      Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/erp/*"
+    }]
+  })
+}
+
+# ECR 이미지 스캔 권한 (buildspec.yml에서 필요)
+resource "aws_iam_role_policy" "codebuild_ecr_scan" {
+  role = aws_iam_role.codebuild.id
+  name = "codebuild-ecr-scan-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ecr:StartImageScan",
+        "ecr:DescribeImageScanFindings"
+      ]
+      Resource = "*"
     }]
   })
 }

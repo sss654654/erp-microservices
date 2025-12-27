@@ -21,6 +21,15 @@ provider "aws" {
 }
 
 # Remote state
+data "terraform_remote_state" "alb_sg" {
+  backend = "s3"
+  config = {
+    bucket = "erp-terraform-state-subin-bucket"
+    key    = "dev/security-groups/alb-sg/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}
+
 data "terraform_remote_state" "alb" {
   backend = "s3"
   config = {
@@ -73,7 +82,7 @@ module "api_gateway" {
   project_name        = var.project_name
   environment         = var.environment
   private_subnet_ids  = data.terraform_remote_state.vpc_subnet.outputs.private_subnet_ids
-  security_group_ids  = ["sg-0a13cde3743d6ead9"]  # TODO: VPC default SG를 data source로 가져오기
+  security_group_ids  = [data.terraform_remote_state.alb_sg.outputs.sg_id]
   
   nlb_listener_arns = module.nlb.listener_arns
 }
