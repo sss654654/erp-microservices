@@ -378,7 +378,36 @@ helm-chart/
 
 ---
 
-##  Step 1: 폴더 생성 (5분)
+##  Step 1: External Secrets Operator 설치 (10분)
+
+### 1-1. Helm으로 설치
+
+```bash
+# Helm repo 추가
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+
+# 설치
+helm install external-secrets external-secrets/external-secrets \
+  -n external-secrets-system \
+  --create-namespace \
+  --wait
+```
+
+**확인:**
+```bash
+kubectl get pods -n external-secrets-system
+
+# 예상 출력:
+# NAME                                                READY   STATUS    RESTARTS   AGE
+# external-secrets-xxx                                1/1     Running   0          1m
+# external-secrets-cert-controller-xxx                1/1     Running   0          1m
+# external-secrets-webhook-xxx                        1/1     Running   0          1m
+```
+
+---
+
+##  Step 2: 폴더 생성 (5분)
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project
@@ -391,7 +420,7 @@ mkdir -p helm-chart/templates
 
 ---
 
-## 📄 Step 2: Chart.yaml 작성 (5분)
+## 📄 Step 3: Chart.yaml 작성 (5분)
 
 ```bash
 cat > helm-chart/Chart.yaml << 'EOF'
@@ -409,7 +438,7 @@ EOF
 
 ---
 
-## 📄 Step 3: values-dev.yaml 작성 (30분)
+## 📄 Step 4: values-dev.yaml 작성 (30분)
 
 ```bash
 cat > helm-chart/values-dev.yaml << 'EOF'
@@ -599,9 +628,9 @@ EOF
 
 ---
 
-## 📄 Step 4: templates/ 파일 작성 (1시간)
+## 📄 Step 5: templates/ 파일 작성 (1시간)
 
-### 4-1. namespace.yaml
+### 5-1. namespace.yaml
 
 ```bash
 cat > helm-chart/templates/namespace.yaml << 'EOF'
@@ -612,7 +641,7 @@ metadata:
 EOF
 ```
 
-### 4-2. externalsecret.yaml
+### 5-2. externalsecret.yaml
 
 ```bash
 cat > helm-chart/templates/externalsecret.yaml << 'EOF'
@@ -647,7 +676,7 @@ EOF
 - Secrets Manager에 저장 불필요
 - ConfigMap에 URI 하드코딩 (개발 환경)
 
-### 4-3. deployment.yaml
+### 5-3. deployment.yaml
 
 ```bash
 cat > helm-chart/templates/deployment.yaml << 'EOF'
@@ -719,7 +748,7 @@ spec:
 EOF
 ```
 
-### 4-4. service.yaml
+### 5-4. service.yaml
 
 ```bash
 cat > helm-chart/templates/service.yaml << 'EOF'
@@ -745,7 +774,7 @@ spec:
 EOF
 ```
 
-### 4-5. hpa.yaml
+### 5-5. hpa.yaml
 
 ```bash
 cat > helm-chart/templates/hpa.yaml << 'EOF'
@@ -776,7 +805,7 @@ spec:
 EOF
 ```
 
-### 4-6. targetgroupbinding.yaml
+### 5-6. targetgroupbinding.yaml
 
 ```bash
 cat > helm-chart/templates/targetgroupbinding.yaml << 'EOF'
@@ -798,7 +827,7 @@ spec:
 EOF
 ```
 
-### 4-7. kafka.yaml
+### 5-7. kafka.yaml
 
 ```bash
 cat > helm-chart/templates/kafka.yaml << 'EOF'
@@ -903,7 +932,7 @@ EOF
 
 ---
 
-##  Step 5: 검증 (10분)
+##  Step 6: 검증 (10분)
 
 ### 5-1. Helm Lint
 
