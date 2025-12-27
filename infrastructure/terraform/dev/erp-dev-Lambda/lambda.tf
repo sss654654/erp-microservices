@@ -55,6 +55,15 @@ data "terraform_remote_state" "ecr" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+# AWS Secrets Manager에서 RDS 자격 증명 읽기
+data "aws_secretsmanager_secret_version" "mysql" {
+  secret_id = "${var.project_name}/${var.environment}/mysql"
+}
+
+locals {
+  db_creds = jsondecode(data.aws_secretsmanager_secret_version.mysql.secret_string)
+}
+
 resource "aws_security_group" "lambda" {
   name        = "${var.project_name}-${var.environment}-lambda-sg"
   description = "Security group for Lambda functions"
@@ -123,7 +132,9 @@ resource "aws_lambda_function" "employee" {
   
   environment {
     variables = {
-      SPRING_DATASOURCE_URL = "jdbc:mysql://${data.terraform_remote_state.rds.outputs.endpoint}/${var.project_name}?useSSL=true"
+      SPRING_DATASOURCE_URL      = "jdbc:mysql://${local.db_creds.host}:${local.db_creds.port}/${local.db_creds.database}?useSSL=true"
+      SPRING_DATASOURCE_USERNAME = local.db_creds.username
+      SPRING_DATASOURCE_PASSWORD = local.db_creds.password
     }
   }
   

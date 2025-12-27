@@ -16,6 +16,10 @@ data "terraform_remote_state" "eks_sg" {
   }
 }
 
+data "aws_eks_cluster" "main" {
+  name = "${var.project_name}-${var.environment}"
+}
+
 resource "aws_security_group" "elasticache" {
   name        = "${var.project_name}-${var.environment}-elasticache-sg"
   description = "Security group for ElastiCache Redis"
@@ -26,7 +30,15 @@ resource "aws_security_group" "elasticache" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [data.terraform_remote_state.eks_sg.outputs.sg_id]
-    description     = "Redis from EKS"
+    description     = "Redis from EKS Node SG"
+  }
+
+  ingress {
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [data.aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
+    description     = "Redis from EKS Cluster SG"
   }
 
   egress {

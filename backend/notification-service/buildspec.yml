@@ -5,10 +5,14 @@ phases:
     commands:
       - cd backend/notification-service
       - echo Logging in to Amazon ECR...
-      - aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com
+      - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - export AWS_REGION=${AWS_DEFAULT_REGION:-ap-northeast-2}
+      - export EKS_CLUSTER_NAME=${EKS_CLUSTER_NAME:-erp-dev}
+      - export K8S_NAMESPACE=${K8S_NAMESPACE:-erp-dev}
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
       - echo Updating kubeconfig...
-      - aws eks update-kubeconfig --region ap-northeast-2 --name erp-dev
-      - REPOSITORY_URI=806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/notification-service
+      - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/erp/notification-service
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
   
   build:
@@ -27,5 +31,5 @@ phases:
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo Deploying to EKS...
-      - kubectl set image deployment/notification-service notification-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
+      - kubectl set image deployment/notification-service notification-service=$REPOSITORY_URI:$IMAGE_TAG -n $K8S_NAMESPACE
       - echo Deployment updated successfully

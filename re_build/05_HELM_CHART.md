@@ -23,13 +23,14 @@ ap-northeast-2c: 1개 Node (Taint: workload=kafka:NoSchedule)
 
 ### Pod 배치 전략
 
-**서비스 Pod (8개):**
+**서비스 Pod (6개):**
 - Anti-Affinity로 2개 AZ에 균등 분산
 - Kafka Node는 Taint 때문에 접근 불가
 ```
-서비스 Node (2a): employee, approval-request, approval-processing, notification (각 1개)
-서비스 Node (2c): employee, approval-request, approval-processing, notification (각 1개)
+서비스 Node (2a): approval-request, approval-processing, notification (각 1개)
+서비스 Node (2c): approval-request, approval-processing, notification (각 1개)
 ```
+**참고**: employee-service는 Lambda로 전환되어 EKS에 배포되지 않음
 
 **Kafka + Zookeeper (4개):**
 - nodeSelector + Toleration으로 Kafka Node로만 배치
@@ -65,32 +66,33 @@ manifests/
 ├── base/
 │   ├── configmap.yaml          # 공통 환경 변수 (하드코딩)
 │   ├── secret.yaml             # 비밀번호 (평문)
-│   └── targetgroupbinding.yaml # NLB 연결 (4개 서비스)
-├── employee/
-│   ├── employee-deployment.yaml      # Pod 생성 방법
-│   ├── employee-service.yaml         # 네트워크 설정
-│   └── employee-service-hpa.yaml     # Auto Scaling
+│   └── targetgroupbinding.yaml # NLB 연결 (3개 서비스)
 ├── approval-request/
-│   └── ... (employee와 거의 동일)
+│   ├── approval-request-deployment.yaml
+│   ├── approval-request-service.yaml
+│   └── approval-request-hpa.yaml
 ├── approval-processing/
-│   └── ... (employee와 거의 동일)
+│   └── ... (거의 동일)
 └── notification/
-    └── ... (employee와 거의 동일)
+    └── ... (거의 동일)
 ```
 
+**참고**: employee-service는 Lambda로 전환되어 manifests에 없음
+
 **문제점:**
-- 4개 서비스 파일이 거의 동일 (중복 400줄)
+- 3개 EKS 서비스 파일이 거의 동일 (중복 300줄)
 - 개발계/운영계 분리 불가 (하드코딩)
 - 비밀번호가 Git에 평문으로 저장
 
-**2. backend 폴더 (4개 buildspec.yml)**
+**2. backend 폴더 (3개 buildspec.yml)**
 ```
 backend/
-├── employee-service/buildspec.yml
 ├── approval-request-service/buildspec.yml
 ├── approval-processing-service/buildspec.yml
 └── notification-service/buildspec.yml
 ```
+
+**참고**: employee-service는 Lambda로 별도 배포 (04_LAMBDA_DEPLOY.md 참조)
 
 **각 buildspec.yml 내용 (거의 동일):**
 ```yaml
@@ -122,8 +124,8 @@ helm-chart/
 ├── values-dev.yaml         # 개발계 설정 (변수)
 ├── values-prod.yaml        # 운영계 설정 (미래)
 └── templates/              # 템플릿 (재사용)
-    ├── deployment.yaml     # 4개 서비스 통합 템플릿
-    ├── service.yaml        # 4개 서비스 통합 템플릿
+    ├── deployment.yaml     # 3개 EKS 서비스 통합 템플릿
+    ├── service.yaml        # 3개 EKS 서비스 통합 템플릿
     └── ...
 ```
 
@@ -142,7 +144,7 @@ helm-chart/
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $service.name }}  # employee-service, approval-request-service...
+  name: {{ $service.name }}  # approval-request-service, approval-processing-service...
 spec:
   replicas: {{ $service.replicaCount }}  # values-dev.yaml에서 가져옴
   template:
@@ -162,11 +164,11 @@ spec:
 ```yaml
 # values-dev.yaml (개발계)
 services:
-  employee:
-    name: employee-service
+  approvalRequest:
+    name: approval-request-service
     replicaCount: 2           # 개발계는 2개
     image:
-      repository: xxx/employee-service
+      repository: xxx/approval-request-service
       tag: latest
     resources:
       limits:
@@ -174,7 +176,7 @@ services:
 
 # values-prod.yaml (운영계)
 services:
-  employee:
+  approvalRequest:
     replicaCount: 5           # 운영계는 5개
     resources:
       limits:
@@ -182,7 +184,7 @@ services:
 ```
 
 **결과:**
-- 1개 템플릿 → 4개 Deployment 생성
+- 1개 템플릿 → 3개 EKS Deployment 생성 (employee는 Lambda)
 - 환경별 설정 분리 (dev/prod)
 - 중복 코드 제거 (400줄 → 100줄)
 
@@ -190,11 +192,11 @@ services:
 
 ### buildspec.yml 변화 (Phase 4에서 구현)
 
-**Before (4개 파일):**
+**Before (3개 파일):**
 ```yaml
-# backend/employee-service/buildspec.yml
+# backend/approval-request-service/buildspec.yml
 post_build:
-  - kubectl set image deployment/employee-service ...  # 이미지만 변경
+  - kubectl set image deployment/approval-request-service ...  # 이미지만 변경
 ```
 
 **After (1개 파일):**
@@ -213,7 +215,7 @@ post_build:
 ```yaml
 # values-dev.yaml 수정
 services:
-  employee:
+  approvalRequest:
     replicaCount: 2 → 5  # Pod 개수 변경
     resources:
       limits:
@@ -242,17 +244,17 @@ manifests/
 ├── base/
 │   ├── configmap.yaml          # 하드코딩
 │   └── secret.yaml             # 평문
-├── employee/
-│   ├── employee-deployment.yaml
-│   ├── employee-service.yaml
-│   └── employee-service-hpa.yaml
 ├── approval-request/
-│   └── ... (거의 동일)
+│   ├── approval-request-deployment.yaml
+│   ├── approval-request-service.yaml
+│   └── approval-request-hpa.yaml
 ├── approval-processing/
 │   └── ... (거의 동일)
 └── notification/
     └── ... (거의 동일)
 ```
+
+**참고**: employee-service는 Lambda로 전환
 
 **문제:**
 -  환경별 설정 분리 불가 (개발계/운영계)
@@ -262,7 +264,7 @@ manifests/
 
 **실제 파일 확인:**
 ```yaml
-# manifests/employee/employee-deployment.yaml
+# manifests/approval-request/approval-request-deployment.yaml
 spec:
   replicas: 2  # ← 하드코딩
   template:
@@ -313,7 +315,7 @@ spec:
 ```yaml
 # values-dev.yaml
 services:
-  employee:
+  approvalRequest:
     replicaCount: 2
     resources:
       limits:
@@ -321,7 +323,7 @@ services:
 
 # values-prod.yaml
 services:
-  employee:
+  approvalRequest:
     replicaCount: 5
     resources:
       limits:
@@ -369,7 +371,7 @@ helm-chart/
     ├── namespace.yaml              # Namespace
     ├── configmap.yaml              # 환경 변수
     ├── externalsecret.yaml         # Secrets Manager 연동
-    ├── deployment.yaml             # 4개 서비스 통합
+    ├── deployment.yaml             # 3개 EKS 서비스 통합 (employee는 Lambda)
     ├── service.yaml                # ClusterIP (모두)
     ├── hpa.yaml                    # Auto Scaling
     ├── targetgroupbinding.yaml     # NLB 연결
@@ -498,7 +500,7 @@ services:
             name: mongodb-secret
             key: uri
       - name: EMPLOYEE_SERVICE_URL
-        value: "http://employee-service:8081"
+        value: "https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/employees"  # Lambda via API Gateway
       - name: NOTIFICATION_SERVICE_URL
         value: "http://notification-service:8084"
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
@@ -531,7 +533,8 @@ services:
         value: "kafka.erp-dev.svc.cluster.local:9092"
   
   employee:
-    enabled: false  # Lambda로 전환됨
+    enabled: false  # ⚠️ Lambda로 전환됨 (04_LAMBDA_DEPLOY.md 참조)
+    # 아래 설정은 참고용으로만 유지 (실제 배포되지 않음)
     name: employee-service
     replicaCount: 2
     image:
@@ -984,21 +987,21 @@ cat test-output.yaml | head -50
 ### 5-3. 리소스 개수 확인
 
 ```bash
-# Deployment 개수 (4개 서비스 + Kafka + Zookeeper = 6개)
+# Deployment 개수 (3개 EKS 서비스 + Kafka + Zookeeper = 5개, employee는 Lambda)
 grep -c "kind: Deployment" test-output.yaml
-# 6
+# 5
 
-# Service 개수 (4개 서비스 + Kafka + Zookeeper = 6개)
+# Service 개수 (3개 EKS 서비스 + Kafka + Zookeeper = 5개)
 grep -c "kind: Service" test-output.yaml
-# 6
+# 5
 
-# HPA 개수 (4개)
+# HPA 개수 (3개, employee 제외)
 grep -c "kind: HorizontalPodAutoscaler" test-output.yaml
-# 4
+# 3
 
-# TargetGroupBinding 개수 (4개)
+# TargetGroupBinding 개수 (3개, employee 제외)
 grep -c "kind: TargetGroupBinding" test-output.yaml
-# 4
+# 3
 ```
 
 ---
@@ -1017,7 +1020,7 @@ grep -c "kind: TargetGroupBinding" test-output.yaml
 - [ ] templates/kafka.yaml 작성
 - [ ] helm lint 통과
 - [ ] helm template 출력 확인
-- [ ] 리소스 개수 확인 (Deployment 6, Service 6, HPA 4, TGB 4)
+- [ ] 리소스 개수 확인 (Deployment 5: 3 EKS서비스 + Kafka + Zookeeper, Service 5, HPA 3, TGB 3)
 
 ---
 
@@ -1026,13 +1029,13 @@ grep -c "kind: TargetGroupBinding" test-output.yaml
 **Helm Chart 생성 완료!**
 
 **다음 파일을 읽으세요:**
-→ **03.5_LAMBDA.md**
+→ **06_BUILDSPEC.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 03.5_LAMBDA.md
+cat 06_BUILDSPEC.md
 ```
 
 ---
 
-**"Helm Chart가 완성되었습니다. 이제 Secrets Manager를 설정할 차례입니다!"**
+**"Helm Chart가 완성되었습니다. 이제 buildspec.yml을 작성할 차례입니다!"**

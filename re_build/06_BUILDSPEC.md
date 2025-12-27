@@ -22,22 +22,23 @@
 
 ##  현재 문제점 분석
 
-### 문제 1: 4개 buildspec.yml 중복
+### 문제 1: 3개 buildspec.yml 중복
 
 **현재 구조:**
 ```
 backend/
-├── employee-service/buildspec.yml          # 거의 동일
 ├── approval-request-service/buildspec.yml  # 거의 동일
 ├── approval-processing-service/buildspec.yml  # 거의 동일
 └── notification-service/buildspec.yml      # 거의 동일
 ```
 
+**참고**: employee-service는 Lambda로 별도 배포
+
 **중복 코드:**
-- ECR 로그인 (4번 반복)
-- kubeconfig 업데이트 (4번 반복)
-- Maven 빌드 (4번 반복)
-- Docker 빌드/푸시 (4번 반복)
+- ECR 로그인 (3번 반복)
+- kubeconfig 업데이트 (3번 반복)
+- Maven 빌드 (3번 반복)
+- Docker 빌드/푸시 (3번 반복)
 
 ### 문제 2: kubectl set image만 실행
 
@@ -45,8 +46,8 @@ backend/
 ```yaml
 post_build:
   commands:
-    - kubectl set image deployment/employee-service \
-        employee-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
+    - kubectl set image deployment/approval-request-service \
+        approval-request-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
 ```
 
 **문제:**

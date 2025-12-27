@@ -153,6 +153,12 @@ terraform init
 terraform apply -auto-approve
 ```
 
+**중요:** ElastiCache SG는 2개의 EKS Security Group을 허용합니다:
+1. Terraform이 생성한 EKS Node SG (`erp-dev-eks-sg`)
+2. EKS가 자동 생성한 Cluster SG (`eks-cluster-sg-erp-dev-xxx`)
+
+이는 EKS Node가 실제로 Cluster SG를 사용하기 때문입니다.
+
 **확인:**
 ```bash
 # 각 폴더에서
@@ -371,8 +377,44 @@ terraform apply -auto-approve
 **확인:**
 ```bash
 terraform output
-# api_gateway_url = "https://mqi4qaw3bb.execute-api.ap-northeast-2.amazonaws.com"
+# api_gateway_url = "https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com"
 # nlb_dns = "erp-dev-nlb-xxx.elb.ap-northeast-2.amazonaws.com"
+```
+
+---
+
+##  Step 10.5: Lambda 배포 (Employee Service, 10분)
+
+**중요:** Employee Service는 Lambda로 전환되어 EKS에 배포되지 않습니다.
+
+```bash
+cd ../erp-dev-Lambda
+
+terraform init
+terraform apply -auto-approve
+```
+
+**생성 리소스:**
+- Lambda Function (erp-dev-employee-service)
+- Lambda IAM Role (Secrets Manager 권한 포함)
+- Lambda Security Group
+- API Gateway Integration (Lambda 직접 연결)
+- API Gateway Routes (/api/employees, /api/employees/{proxy+})
+
+**특징:**
+- **ASM 통합**: RDS 자격증명을 Secrets Manager에서 읽어서 환경변수로 주입
+- **VPC 내부**: Private Subnet에서 RDS 직접 연결
+- **API Gateway 직접 통합**: VPC Link 불필요
+
+**확인:**
+```bash
+terraform output
+# lambda_function_arn = "arn:aws:lambda:ap-northeast-2:xxx:function:erp-dev-employee-service"
+# ecr_repository_url = "xxx.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service-lambda"
+
+# Lambda 함수 상태 확인
+aws lambda get-function --function-name erp-dev-employee-service --region ap-northeast-2 --query 'Configuration.State' --output text
+# Active
 ```
 
 ---
@@ -510,15 +552,20 @@ terraform import module.s3.aws_s3_bucket.frontend erp-dev-frontend-dev
 - [x] Subnet 6개 생성 완료 (Public x2, Private x2, Data x2)
 - [x] NAT Gateway 생성 완료 (nat-0bc52407b9db0428a)
 - [x] Security Groups 4개 생성 완료 (ALB, EKS, RDS, ElastiCache)
+  - ElastiCache SG: EKS Node SG + EKS Cluster SG 모두 허용
 - [x] IAM Roles 4개 생성 완료 + CodeBuild 권한 8개 추가
 - [x] RDS MySQL 생성 완료 (erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com)
+  - ASM에서 자격증명 읽어서 생성
 - [x] ElastiCache Redis 생성 완료 (erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com)
 - [x] EKS Cluster 생성 완료 (erp-dev, v1.31)
 - [x] EKS Node Group 생성 완료 (4 nodes, t3.small)
-- [x] ECR Repository 생성 완료 (4개)
+- [x] ECR Repository 생성 완료 (4개: 3 EKS + 1 Lambda)
 - [x] Load Balancer Controller 설치 완료 (Helm)
 - [x] NLB 생성 완료 (erp-dev-nlb + 4 Target Groups)
 - [x] API Gateway 생성 완료 (yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com)
+- [x] Lambda 생성 완료 (erp-dev-employee-service)
+  - ASM에서 RDS 자격증명 읽어서 환경변수 주입
+  - API Gateway 직접 통합 (VPC Link 불필요)
 - [x] Frontend S3, CloudFront 생성 완료 (d3goird6ndqlnv.cloudfront.net)
 - [x] Cognito User Pool 생성 완료 (ap-northeast-2_OZneAVLnb)
 

@@ -5,10 +5,10 @@ phases:
     commands:
       - cd backend/employee-service
       - echo Logging in to Amazon ECR...
-      - aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com
-      - echo Updating kubeconfig...
-      - aws eks update-kubeconfig --region ap-northeast-2 --name erp-dev
-      - REPOSITORY_URI=806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service
+      - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - export AWS_REGION=${AWS_DEFAULT_REGION:-ap-northeast-2}
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/erp/employee-service-lambda
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
   
   build:
@@ -16,8 +16,8 @@ phases:
       - echo Build started on `date`
       - echo Building the JAR file...
       - mvn clean package -DskipTests
-      - echo Building the Docker image...
-      - docker build -t $REPOSITORY_URI:latest .
+      - echo Building the Docker image for Lambda...
+      - docker build -f Dockerfile.lambda -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
   
   post_build:
@@ -26,6 +26,6 @@ phases:
       - echo Pushing the Docker images...
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - echo Deploying to EKS...
-      - kubectl set image deployment/employee-service employee-service=$REPOSITORY_URI:$IMAGE_TAG -n erp-dev
-      - kubectl rollout status deployment/employee-service -n erp-dev
+      - echo Updating Lambda function...
+      - aws lambda update-function-code --function-name erp-dev-employee-service --image-uri $REPOSITORY_URI:$IMAGE_TAG --region $AWS_REGION
+      - echo Lambda function updated successfully
