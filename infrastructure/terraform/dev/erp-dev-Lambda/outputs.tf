@@ -7,5 +7,5 @@ output "lambda_function_name" {
 }
 
 output "ecr_repository_url" {
-  value = aws_ecr_repository.employee_lambda.repository_url
+  value = data.terraform_remote_state.ecr.outputs.employee_lambda_repository_url
 }

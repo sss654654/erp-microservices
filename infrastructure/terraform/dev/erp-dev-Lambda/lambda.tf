@@ -43,6 +43,15 @@ data "terraform_remote_state" "api_gateway" {
   }
 }
 
+data "terraform_remote_state" "ecr" {
+  backend = "s3"
+  config = {
+    bucket = var.terraform_state_bucket
+    key    = "${var.environment}/ecr/terraform.tfstate"
+    region = var.region
+  }
+}
+
 resource "aws_security_group" "lambda" {
   name        = "${var.project_name}-${var.environment}-lambda-sg"
   description = "Security group for Lambda functions"
@@ -97,25 +106,12 @@ resource "aws_iam_role_policy" "lambda_secrets" {
   })
 }
 
-resource "aws_ecr_repository" "employee_lambda" {
-  name                 = "${var.project_name}/employee-service-lambda"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-employee-service-lambda"
-  }
-}
-
 resource "aws_lambda_function" "employee" {
   function_name = "${var.project_name}-${var.environment}-employee-service"
   role          = aws_iam_role.lambda.arn
   
   package_type = "Image"
-  image_uri    = "${aws_ecr_repository.employee_lambda.repository_url}:latest"
+  image_uri    = "${data.terraform_remote_state.ecr.outputs.employee_lambda_repository_url}:latest"
   
   vpc_config {
     subnet_ids         = data.terraform_remote_state.vpc_subnet.outputs.private_subnet_ids
@@ -125,7 +121,6 @@ resource "aws_lambda_function" "employee" {
   environment {
     variables = {
       SPRING_DATASOURCE_URL = "jdbc:mysql://${data.terraform_remote_state.rds.outputs.endpoint}/${var.project_name}?useSSL=true"
-      AWS_REGION            = var.region
     }
   }
   
