@@ -57,13 +57,13 @@ re_build/
 ### CodePipeline 강점 극대화
 
 **CGV와 차별화:**
-1.  AWS Secrets Manager 통합
-2.  Parameter Store 활용
-3.  CodeBuild 환경 변수 암호화
-4.  ECR 이미지 스캔 자동화
-5.  CloudWatch Logs 중앙 집중
-6.  X-Ray 트레이싱 통합
-7.  단일 파이프라인 + Helm Chart
+1. ✅ AWS Secrets Manager 통합 (완료)
+2. ✅ ECR 이미지 스캔 자동화 (완료)
+3. ✅ CloudWatch Logs 중앙 집중 (완료)
+4. ✅ 단일 파이프라인 + Helm Chart (구조 완료)
+5.  Parameter Store 활용 (06단계)
+6.  CodeBuild 환경 변수 암호화 (06단계)
+7.  X-Ray 트레이싱 통합 (06단계)
 
 ---
 

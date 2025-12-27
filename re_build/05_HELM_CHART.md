@@ -644,10 +644,34 @@ EOF
 ### 5-2. externalsecret.yaml
 
 ```bash
+cat > helm-chart/templates/secretstore.yaml << 'EOF'
+{{- if .Values.secretsManager.enabled }}
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: aws-secrets
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: {{ .Values.secretsManager.region }}
+{{- end }}
+EOF
+```
+
+**중요 변경사항:**
+- `SecretStore` → `ClusterSecretStore` (클러스터 전체에서 사용)
+- `apiVersion: v1` (v1beta1 아님)
+- `auth` 섹션 제거 (EKS Node IAM Role 자동 사용)
+
+### 5-2. externalsecret.yaml
+
+```bash
 cat > helm-chart/templates/externalsecret.yaml << 'EOF'
 {{- if .Values.secretsManager.enabled }}
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: rds-secret
@@ -656,7 +680,7 @@ spec:
   refreshInterval: 1h
   secretStoreRef:
     name: aws-secrets
-    kind: SecretStore
+    kind: ClusterSecretStore
   target:
     name: rds-secret
     creationPolicy: Owner
@@ -671,10 +695,9 @@ spec:
 EOF
 ```
 
-**️ MongoDB Secret 제거:**
-- MongoDB는 Atlas 사용 (외부 관리)
-- Secrets Manager에 저장 불필요
-- ConfigMap에 URI 하드코딩 (개발 환경)
+**중요 변경사항:**
+- `kind: ClusterSecretStore` (SecretStore 아님)
+- `apiVersion: v1` (v1beta1 아님)
 
 ### 5-3. deployment.yaml
 

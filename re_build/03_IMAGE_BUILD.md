@@ -52,25 +52,12 @@ aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS
 
 ## Step 1: Employee Service (Lambda) 이미지 빌드 (10분)
 
+**주의**: Employee Service는 Lambda로 전환되었으므로 EKS용 이미지는 빌드하지 않습니다.
+Lambda 이미지는 04_LAMBDA_DEPLOY.md에서 처리합니다.
+
 ```bash
-cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/backend/employee-service
-
-# Maven 빌드
-mvn clean package -DskipTests
-
-# Lambda용 Docker 이미지 빌드
-docker build -f Dockerfile.lambda -t employee-service-lambda:latest .
-
-# ECR 태그
-docker tag employee-service-lambda:latest 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service-lambda:latest
-
-# ECR 푸시
-docker push 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/employee-service-lambda:latest
-```
-
-**확인:**
-```bash
-aws ecr describe-images --repository-name erp/employee-service-lambda --region ap-northeast-2 --query 'imageDetails[0].imageTags' --output text
+# Employee Service는 건너뜁니다 (Lambda 전용)
+# 04_LAMBDA_DEPLOY.md 참조
 ```
 
 ---
@@ -153,8 +140,8 @@ aws ecr describe-images --repository-name erp/notification-service --region ap-n
 ## Step 5: 전체 확인 (5분)
 
 ```bash
-# 모든 ECR Repository 이미지 확인
-for repo in employee-service-lambda approval-request-service approval-processing-service notification-service; do
+# 3개 ECR Repository 이미지 확인 (employee-service-lambda 제외)
+for repo in approval-request-service approval-processing-service notification-service; do
   echo "=== $repo ==="
   aws ecr describe-images --repository-name erp/$repo --region ap-northeast-2 --query 'imageDetails[0].[imagePushedAt,imageTags]' --output text
 done
@@ -162,29 +149,27 @@ done
 
 **예상 출력:**
 ```
-=== employee-service-lambda ===
-2025-12-28T01:15:00+09:00    latest
-
 === approval-request-service ===
-2025-12-28T01:16:00+09:00    latest
+2025-12-28T01:39:17+09:00    latest
 
 === approval-processing-service ===
-2025-12-28T01:17:00+09:00    latest
+2025-12-28T01:40:28+09:00    latest
 
 === notification-service ===
-2025-12-28T01:18:00+09:00    latest
+2025-12-28T01:41:44+09:00    latest
 ```
+
+**참고**: employee-service-lambda는 04_LAMBDA_DEPLOY.md에서 별도로 빌드합니다.
 
 ---
 
 ## 완료 체크리스트
 
 - [ ] ECR 로그인 성공
-- [ ] Employee Service (Lambda) 이미지 빌드 & 푸시
 - [ ] Approval Request Service 이미지 빌드 & 푸시
 - [ ] Approval Processing Service 이미지 빌드 & 푸시
 - [ ] Notification Service 이미지 빌드 & 푸시
-- [ ] 모든 ECR Repository에 이미지 확인
+- [ ] 3개 ECR Repository에 이미지 확인 (employee 제외)
 
 ---
 
