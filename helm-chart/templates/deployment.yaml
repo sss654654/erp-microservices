@@ -49,17 +49,5 @@ spec:
         env:
           {{- toYaml $service.env | nindent 8 }}
         {{- end }}
-        livenessProbe:
-          httpGet:
-            path: /actuator/health
-            port: {{ $service.port }}
-          initialDelaySeconds: 60
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /actuator/health
-            port: {{ $service.port }}
-          initialDelaySeconds: 30
-          periodSeconds: 5
 {{- end }}
 {{- end }}
