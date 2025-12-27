@@ -528,11 +528,11 @@ kubectl get svc -n erp-dev | grep employee
 **Lambda 전환 완료!**
 
 **다음 파일을 읽으세요:**
-→ **04_BUILDSPEC.md**
+→ **05_HELM_CHART.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 04_BUILDSPEC.md
+cat 05_HELM_CHART.md
 ```
 
 ---

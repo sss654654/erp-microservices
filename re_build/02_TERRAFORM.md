@@ -11,20 +11,21 @@
 
 Terraform 모듈 간 의존성:
 ```
-VPC → SecurityGroups → IAM → Secrets → Databases → EKS → LoadBalancerController → APIGateway → Frontend → Cognito
+VPC → SecurityGroups → IAM → Databases → EKS → ECR → LoadBalancerController → Lambda → APIGateway → Frontend → Cognito
 ```
 
-**실제 Terraform 구조 (98개 .tf 파일 분석 완료):**
+**실제 Terraform 구조:**
 - VPC: 세분화 (vpc, subnet, route-table)
-- SecurityGroups: 세분화 (4개 독립)
-- IAM: 통합 (4개 Role 한 번에)
-- Secrets: 통합 (mysql-secret + eks-node-secrets-policy)
+- SecurityGroups: 세분화 (alb-sg, eks-sg, rds-sg, elasticache-sg)
+- IAM: 세분화 (eks-cluster-role, eks-node-role, codebuild-role, codepipeline-role)
 - Databases: 세분화 (rds, elasticache)
-- EKS: 통합 (cluster + node-group + sg-rules)
+- EKS: 세분화 (eks-cluster, eks-node-group, eks-cluster-sg-rules)
+- ECR: 단일 (4개 Repository 통합)
 - LoadBalancerController: 단일
-- APIGateway: 통합 (nlb + api-gateway)
-- Frontend: 통합 (s3 + cloudfront)
-- Cognito: 통합 (user-pool + lambda)
+- Lambda: 단일
+- APIGateway: 세분화 (nlb, api-gateway)
+- Frontend: 세분화 (s3, cloudfront)
+- Cognito: 세분화 (user-pool, identity-pool)
 
 **잘못된 순서로 실행 시:**
 - EKS를 VPC보다 먼저 실행 → 에러 (Subnet이 없음)
@@ -303,7 +304,32 @@ kubectl get nodes
 
 ---
 
-##  Step 6: Load Balancer Controller 배포 (단일, 10분)
+##  Step 6: ECR Repository 배포 (단일, 5분)
+
+```bash
+cd ../erp-dev-ECR
+
+terraform init
+terraform apply -auto-approve
+```
+
+**생성 리소스:**
+- ECR Repository: erp/employee-service-lambda (Lambda용)
+- ECR Repository: erp/approval-request-service (EKS용)
+- ECR Repository: erp/approval-processing-service (EKS용)
+- ECR Repository: erp/notification-service (EKS용)
+
+**확인:**
+```bash
+terraform output
+
+# ECR Repository 목록 확인
+aws ecr describe-repositories --region ap-northeast-2 --query 'repositories[?contains(repositoryName, `erp`)].repositoryName' --output table
+```
+
+---
+
+##  Step 10: Load Balancer Controller 배포 (단일, 10분)
 
 ```bash
 cd ../erp-dev-LoadBalancerController
@@ -325,7 +351,7 @@ kubectl get pods -n kube-system | grep aws-load-balancer-controller
 
 ---
 
-##  Step 7: API Gateway 배포 (통합, 15분)
+##  Step 10: API Gateway 배포 (통합, 15분)
 
 ```bash
 cd ../erp-dev-APIGateway
@@ -351,7 +377,7 @@ terraform output
 
 ---
 
-##  Step 8: Frontend 배포 (통합, 10분)
+##  Step 10: Frontend 배포 (통합, 10분)
 
 ```bash
 cd ../erp-dev-Frontend
@@ -373,7 +399,7 @@ terraform output
 
 ---
 
-##  Step 9: Cognito 배포 (통합, 5분)
+##  Step 10: Cognito 배포 (통합, 5분)
 
 ```bash
 cd ../erp-dev-Cognito
@@ -488,7 +514,8 @@ terraform import module.s3.aws_s3_bucket.frontend erp-dev-frontend-dev
 - [x] RDS MySQL 생성 완료 (erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com)
 - [x] ElastiCache Redis 생성 완료 (erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com)
 - [x] EKS Cluster 생성 완료 (erp-dev, v1.31)
-- [x] EKS Node Group 생성 완료 (3 nodes, t3.small)
+- [x] EKS Node Group 생성 완료 (4 nodes, t3.small)
+- [x] ECR Repository 생성 완료 (4개)
 - [x] Load Balancer Controller 설치 완료 (Helm)
 - [x] NLB 생성 완료 (erp-dev-nlb + 4 Target Groups)
 - [x] API Gateway 생성 완료 (yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com)

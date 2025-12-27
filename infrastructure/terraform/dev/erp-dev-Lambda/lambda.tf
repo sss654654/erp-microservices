@@ -52,6 +52,9 @@ data "terraform_remote_state" "ecr" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 resource "aws_security_group" "lambda" {
   name        = "${var.project_name}-${var.environment}-lambda-sg"
   description = "Security group for Lambda functions"
@@ -101,7 +104,7 @@ resource "aws_iam_role_policy" "lambda_secrets" {
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ]
-      Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.project_name}/*"
+      Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/*"
     }]
   })
 }
@@ -137,7 +140,7 @@ resource "aws_lambda_permission" "api_gateway" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.employee.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "arn:aws:execute-api:${var.region}:${var.account_id}:${data.terraform_remote_state.api_gateway.outputs.api_id}/*/*"
+  source_arn    = "arn:aws:execute-api:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${data.terraform_remote_state.api_gateway.outputs.api_id}/*/*"
 }
 
 resource "aws_apigatewayv2_integration" "employee_lambda" {

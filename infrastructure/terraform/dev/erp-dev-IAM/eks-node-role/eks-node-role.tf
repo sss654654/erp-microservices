@@ -1,3 +1,6 @@
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 resource "aws_iam_role" "eks_node" {
   name = "${var.project_name}-${var.environment}-eks-node-role"
 
@@ -51,7 +54,7 @@ resource "aws_iam_role_policy" "eks_node_secrets_manager" {
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ]
-      Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.project_name}/*"
+      Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/*"
     }]
   })
 }

@@ -555,11 +555,11 @@ git commit -m "Unified buildspec.yml with CodePipeline strengths"
 **buildspec.yml 작성 완료!**
 
 **다음 파일을 읽으세요:**
-→ **05_CODEPIPELINE.md**
+→ **07_CODEPIPELINE.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 05_CODEPIPELINE.md
+cat 07_CODEPIPELINE.md
 ```
 
 ---

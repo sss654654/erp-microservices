@@ -490,11 +490,11 @@ MAX_RETRIES=60  # 10분으로 증가
 **CodePipeline 생성 완료!**
 
 **다음 파일을 읽으세요:**
-→ **06_VERIFICATION.md**
+→ **08_VERIFICATION.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 06_VERIFICATION.md
+cat 08_VERIFICATION.md
 ```
 
 ---
