@@ -140,7 +140,7 @@ resource "aws_lambda_function" "employee" {
     }
   }
   
-  memory_size = 1024
+  memory_size = 2048
   timeout     = 60
   
   tags = {

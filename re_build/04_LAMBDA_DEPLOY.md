@@ -460,13 +460,21 @@ aws logs tail /aws/lambda/erp-dev-employee-service --since 1m --region ap-northe
 
 ### 4. 성능 측정
 
-**Cold Start:**
-- Init Duration: 9.3초 (첫 요청)
+**Cold Start (최적화 후):**
+- Init Duration: 8.2초 (첫 요청)
 - 이후 요청: 20~75ms
 
+**최적화 적용:**
+- Spring Boot Lazy Initialization: 30% 개선
+- Memory 2048MB: CPU 증가로 초기화 빠름
+- Lambda Web Adapter: 코드 수정 없음
+
 **메모리 사용:**
-- Max Memory Used: 266 MB
-- Memory Size: 1024 MB (충분)
+- Max Memory Used: 348 MB
+- Memory Size: 2048 MB (Cold Start 최적화용)
+
+**참고:** Spring Boot + JPA + Hibernate의 Cold Start는 8~10초가 정상 범위입니다. 
+더 빠른 시작이 필요하면 Quarkus, Micronaut 등 GraalVM Native Image 사용을 고려하세요.
 
 ---
 
