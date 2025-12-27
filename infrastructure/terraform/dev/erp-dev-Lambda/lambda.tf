@@ -135,6 +135,8 @@ resource "aws_lambda_function" "employee" {
       SPRING_DATASOURCE_URL      = "jdbc:mysql://${local.db_creds.host}:${local.db_creds.port}/${local.db_creds.database}?useSSL=true"
       SPRING_DATASOURCE_USERNAME = local.db_creds.username
       SPRING_DATASOURCE_PASSWORD = local.db_creds.password
+      AWS_LWA_PORT               = "8081"
+      SERVER_PORT                = "8081"
     }
   }
   
