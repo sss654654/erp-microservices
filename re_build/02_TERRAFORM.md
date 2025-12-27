@@ -542,11 +542,11 @@ cat terraform-outputs.txt
 **Terraform 배포 완료!**
 
 **다음 파일을 읽으세요:**
-→ **03_HELM_CHART.md**
+→ **03_IMAGE_BUILD.md**
 
 ```bash
 cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project/re_build
-cat 03_HELM_CHART.md
+cat 03_IMAGE_BUILD.md
 ```
 
 ---

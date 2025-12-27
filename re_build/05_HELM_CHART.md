@@ -1,4 +1,4 @@
-# 03. Helm Chart 생성
+# 05. Helm Chart 배포
 
 **소요 시간**: 2시간  
 **목표**: Plain YAML → Helm Chart 전환 (환경 분리, 템플릿 재사용)

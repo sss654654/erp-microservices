@@ -13,22 +13,24 @@ re_build/
 ├── 00_START_HERE.md           # ← 지금 읽는 파일 (전체 개요)
 ├── 01_SECRETS_SETUP.md         # Secrets Manager 설정 (먼저!)
 ├── 02_TERRAFORM.md             # Terraform 배포 (2시간)
-├── 03_HELM_CHART.md            # Helm Chart 생성 (2시간)
-├── 03.5_LAMBDA.md              # Lambda 전환 (2시간) ← NEW
-├── 04_BUILDSPEC.md             # buildspec.yml 작성 (1시간)
-├── 05_CODEPIPELINE.md          # CodePipeline 생성 (1시간)
-└── 06_VERIFICATION.md          # 검증 및 테스트 (1시간)
+├── 03_IMAGE_BUILD.md           # 이미지 빌드 & ECR 푸시 (30분)
+├── 04_LAMBDA_DEPLOY.md         # Lambda 배포 (30분)
+├── 05_HELM_CHART.md            # Helm Chart 배포 (1시간)
+├── 06_BUILDSPEC.md             # buildspec.yml 작성 (1시간)
+├── 07_CODEPIPELINE.md          # CodePipeline 생성 (1시간)
+└── 08_VERIFICATION.md          # 검증 및 테스트 (1시간)
 ```
 
 ### 읽는 순서
 1. **00_START_HERE.md** (이 파일) - 전체 흐름 이해
 2. **01_SECRETS_SETUP.md** - Secrets Manager 설정 (먼저!)
 3. **02_TERRAFORM.md** - Terraform 배포 시작
-4. **03_HELM_CHART.md** - Helm Chart 생성
-5. **03.5_LAMBDA.md** - Employee Service Lambda 전환
-6. **04_BUILDSPEC.md** - buildspec.yml 작성
-7. **05_CODEPIPELINE.md** - CodePipeline 생성
-8. **06_VERIFICATION.md** - 검증 및 테스트
+4. **03_IMAGE_BUILD.md** - 이미지 빌드 & ECR 푸시
+5. **04_LAMBDA_DEPLOY.md** - Lambda 배포
+6. **05_HELM_CHART.md** - Helm Chart 배포
+7. **06_BUILDSPEC.md** - buildspec.yml 작성
+8. **07_CODEPIPELINE.md** - CodePipeline 생성
+9. **08_VERIFICATION.md** - 검증 및 테스트
 
 ---
 
@@ -71,8 +73,6 @@ re_build/
 ┌─────────────────────────────────────────────────────────────┐
 │ Phase 1: Secrets Manager 설정 (30분)                         │
 │ - RDS 비밀번호 저장                                          │
-│ - External Secrets Operator 설치                            │
-│ - SecretStore 생성                                           │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -81,49 +81,44 @@ re_build/
 │ - IAM Roles                                                  │
 │ - RDS (ASM에서 비밀번호 읽음), ElastiCache                   │
 │ - EKS Cluster, Node Group                                    │
+│ - ECR Repository (4개)                                       │
 │ - NLB, API Gateway                                           │
 │ - Frontend (S3, CloudFront)                                  │
 │ - Cognito                                                    │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 3: Helm Chart 생성 (2시간)                             │
-│ - Chart.yaml                                                 │
-│ - values-dev.yaml (환경별 설정)                              │
-│ - templates/ (Deployment, Service, HPA 등)                   │
-│ - External Secrets 연동                                      │
+│ Phase 3: 이미지 빌드 & ECR 푸시 (30분)                       │
+│ - Employee Service (Lambda용)                                │
+│ - Approval Request Service (EKS용)                           │
+│ - Approval Processing Service (EKS용)                        │
+│ - Notification Service (EKS용)                               │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 3.5: Lambda 전환 (2시간)                               │
-│ - Employee Service를 Lambda로 전환                           │
-│ - 비용 21% 절감                                              │
+│ Phase 4: Lambda 배포 (30분)                                  │
+│ - Lambda 함수 업데이트 (ECR 이미지 사용)                     │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 4: buildspec.yml 작성 (1시간)                          │
-│ - Secrets Manager 통합                                       │
-│ - Parameter Store 활용                                       │
-│ - ECR 이미지 스캔 자동화                                     │
-│ - CloudWatch Logs 전송                                       │
-│ - X-Ray 트레이싱                                             │
-│ - Helm upgrade 명령                                          │
+│ Phase 5: Helm Chart 배포 (1시간)                             │
+│ - External Secrets Operator 설치                            │
+│ - Helm Chart 배포 (ECR 이미지 사용)                          │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 5: CodePipeline 생성 (1시간)                           │
-│ - 단일 파이프라인 생성                                       │
-│ - CodeBuild 프로젝트 생성                                    │
-│ - IAM 권한 설정                                              │
-│ - GitHub 연동                                                │
+│ Phase 6: buildspec.yml 작성 (1시간)                          │
+│ - 자동 빌드 & 배포 스크립트                                  │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 6: 검증 및 테스트 (1시간)                              │
-│ - Helm 배포 확인                                             │
-│ - Pod 상태 확인                                              │
-│ - API Gateway 테스트                                         │
-│ - Git Push 테스트                                            │
+│ Phase 7: CodePipeline 생성 (1시간)                           │
+│ - Git Push → 자동 배포                                       │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 8: 검증 및 테스트 (1시간)                              │
+│ - 전체 시스템 테스트                                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -135,12 +130,13 @@ re_build/
 |-------|------|----------|
 | Phase 1 | Secrets Manager 설정 | 30분 |
 | Phase 2 | Terraform 배포 | 2시간 |
-| Phase 3 | Helm Chart 생성 | 2시간 |
-| Phase 3.5 | Lambda 전환 (Employee Service) | 2시간 |
-| Phase 4 | buildspec.yml 작성 | 1시간 |
-| Phase 5 | CodePipeline 생성 | 1시간 |
-| Phase 6 | 검증 및 테스트 | 1시간 |
-| **합계** | | **9.5시간** |
+| Phase 3 | 이미지 빌드 & ECR 푸시 | 30분 |
+| Phase 4 | Lambda 배포 | 30분 |
+| Phase 5 | Helm Chart 배포 | 1시간 |
+| Phase 6 | buildspec.yml 작성 | 1시간 |
+| Phase 7 | CodePipeline 생성 | 1시간 |
+| Phase 8 | 검증 및 테스트 | 1시간 |
+| **합계** | | **8시간** |
 
 **실제 소요 시간: 2일 (휴식 포함)**
 
@@ -246,56 +242,40 @@ git push origin backup-before-rebuild
 ##  체크리스트
 
 ### Phase 1: Secrets Manager
-- [ ] AWS Secrets Manager에 Secret 생성
-- [ ] External Secrets Operator 설치
-- [ ] SecretStore 생성
-- [ ] ExternalSecret 테스트 성공
+- [x] mysql-secret.json 파일 생성
+- [x] AWS Secrets Manager에 Secret 생성
 
 ### Phase 2: Terraform
-- [ ] VPC 배포 완료
-- [ ] Security Groups 배포 완료
-- [ ] IAM Roles 배포 완료
-- [ ] RDS, ElastiCache 배포 완료
-- [ ] EKS Cluster 배포 완료
-- [ ] NLB, API Gateway 배포 완료
-- [ ] Frontend 배포 완료
+- [x] VPC 배포 완료
+- [x] Security Groups 배포 완료
+- [x] IAM Roles 배포 완료
+- [x] RDS, ElastiCache 배포 완료
+- [x] EKS Cluster 배포 완료
+- [x] ECR Repository 배포 완료
+- [x] NLB, API Gateway 배포 완료
+- [x] Frontend 배포 완료
 
-### Phase 3: Helm Chart
-- [ ] Chart.yaml 작성
-- [ ] values-dev.yaml 작성 (employee 제외)
-- [ ] templates/ 8개 파일 작성
-- [ ] helm lint 통과
-- [ ] helm template 출력 확인
+### Phase 3: 이미지 빌드
+- [ ] Employee Service (Lambda) 이미지 빌드 & 푸시
+- [ ] Approval Request Service 이미지 빌드 & 푸시
+- [ ] Approval Processing Service 이미지 빌드 & 푸시
+- [ ] Notification Service 이미지 빌드 & 푸시
 
-### Phase 3.5: Lambda 전환
-- [ ] Terraform Lambda 모듈 생성
-- [ ] Dockerfile.lambda 생성
-- [ ] pom.xml Lambda 의존성 추가
-- [ ] Terraform apply 성공
-- [ ] Lambda 이미지 빌드 및 푸시
-- [ ] API Gateway 테스트 성공
+### Phase 4: Lambda 배포
+- [ ] Lambda 함수 업데이트
 
-### Phase 4: buildspec.yml
-- [ ] Secrets Manager 통합
-- [ ] Parameter Store 통합
-- [ ] ECR 이미지 스캔 추가
-- [ ] CloudWatch Logs 전송 추가
-- [ ] X-Ray 트레이싱 추가
-- [ ] Helm upgrade 명령 추가
+### Phase 5: Helm Chart
+- [ ] External Secrets Operator 설치
+- [ ] Helm Chart 배포
 
-### Phase 5: CodePipeline
-- [ ] 단일 파이프라인 생성
-- [ ] CodeBuild 프로젝트 생성
-- [ ] IAM 권한 설정
-- [ ] GitHub 연동
+### Phase 6: buildspec.yml
+- [ ] buildspec.yml 작성
 
-### Phase 6: 검증
-- [ ] Helm 배포 성공
-- [ ] Pod 모두 Running
-- [ ] Service 모두 ClusterIP
-- [ ] TargetGroupBinding 연결 확인
-- [ ] API Gateway 테스트 성공
-- [ ] Git Push 테스트 성공
+### Phase 7: CodePipeline
+- [ ] CodePipeline 생성
+
+### Phase 8: 검증
+- [ ] 전체 시스템 테스트
 
 ---
 

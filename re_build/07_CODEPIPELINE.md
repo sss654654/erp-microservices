@@ -1,4 +1,4 @@
-# 05. CodePipeline 생성 (단일 파이프라인)
+# 07. CodePipeline 생성 (단일 파이프라인)
 
 **소요 시간**: 1시간  
 **목표**: 4개 CodePipeline → 1개 통합, GitHub 연동

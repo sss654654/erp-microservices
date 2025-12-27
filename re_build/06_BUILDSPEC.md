@@ -1,4 +1,4 @@
-# 04. buildspec.yml 작성 (단일 파이프라인)
+# 06. buildspec.yml 작성 (단일 파이프라인)
 
 **소요 시간**: 1.5시간  
 **목표**: 4개 buildspec.yml → 1개 통합, CodePipeline 강점 극대화

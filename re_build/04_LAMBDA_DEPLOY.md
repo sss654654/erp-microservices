@@ -1,4 +1,4 @@
-# 03.5. Lambda 전환 (Employee Service)
+# 04. Lambda 배포 (Employee Service)
 
 **소요 시간**: 2시간  
 **목표**: Employee Service를 EKS → Lambda 전환 (비용 21% 절감)
