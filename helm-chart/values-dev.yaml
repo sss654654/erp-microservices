@@ -15,6 +15,22 @@ secretsManager:
         - port
         - database
 
+# Fluent Bit (CloudWatch Logs)
+fluentBit:
+  enabled: true
+  region: ap-northeast-2
+  logGroupName: /aws/eks/erp-dev/application
+  logStreamPrefix: fluentbit-
+  image:
+    repository: amazon/aws-for-fluent-bit
+    tag: 2.31.12
+  resources:
+    limits:
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+
 # 공통 설정
 config:
   mongodbUri: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
@@ -55,6 +71,8 @@ services:
         value: "http://notification-service:8084"
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
         value: "kafka.erp-dev.svc.cluster.local:9092"
+      - name: AWS_XRAY_DAEMON_ADDRESS
+        value: "xray-daemon.erp-dev.svc.cluster.local:2000"
   
   approvalProcessing:
     enabled: true
@@ -81,6 +99,8 @@ services:
     env:
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
         value: "kafka.erp-dev.svc.cluster.local:9092"
+      - name: AWS_XRAY_DAEMON_ADDRESS
+        value: "xray-daemon.erp-dev.svc.cluster.local:2000"
   
   employee:
     enabled: false  # Lambda로 전환
@@ -145,6 +165,8 @@ services:
         value: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
       - name: REDIS_PORT
         value: "6379"
+      - name: AWS_XRAY_DAEMON_ADDRESS
+        value: "xray-daemon.erp-dev.svc.cluster.local:2000"
 
 # Kafka 설정
 kafka:
