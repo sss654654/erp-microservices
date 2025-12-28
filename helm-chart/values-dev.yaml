@@ -31,6 +31,20 @@ fluentBit:
       cpu: 100m
       memory: 100Mi
 
+# X-Ray (Distributed Tracing)
+xray:
+  enabled: true
+  image:
+    repository: amazon/aws-xray-daemon
+    tag: latest
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: 256m
+    requests:
+      cpu: 32m
+      memory: 32Mi
+
 # 공통 설정
 config:
   mongodbUri: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
