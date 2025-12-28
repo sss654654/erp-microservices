@@ -23,3 +23,8 @@ grpc:
     approvalprocessingservice:
       address: ${APPROVAL_PROCESSING_GRPC_ADDRESS:static://approval-processing-service:9090}
       negotiationType: plaintext
+
+aws:
+  xray:
+    enabled: true
+    daemon-address: ${AWS_XRAY_DAEMON_ADDRESS:xray-daemon.erp-dev.svc.cluster.local:2000}
