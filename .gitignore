@@ -49,3 +49,4 @@ manifests/secret.yaml
 제출보고서/
 secrets/
 re_build/mysql-secret.json
+re_build/cj_cloudwave_team/
