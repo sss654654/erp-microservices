@@ -11,7 +11,7 @@
 
 Terraform 모듈 간 의존성:
 ```
-VPC → SecurityGroups → IAM → Databases → EKS → ECR → LoadBalancerController → Lambda → APIGateway → Frontend → Cognito
+VPC → SecurityGroups → IAM → Databases → EKS → ECR → LoadBalancerController → Lambda → APIGateway → Frontend → Cognito → ParameterStore → CloudWatch
 ```
 
 **실제 Terraform 구조:**
@@ -26,11 +26,15 @@ VPC → SecurityGroups → IAM → Databases → EKS → ECR → LoadBalancerCon
 - APIGateway: 세분화 (nlb, api-gateway)
 - Frontend: 세분화 (s3, cloudfront)
 - Cognito: 세분화 (user-pool, identity-pool)
+- **ParameterStore: 단일 (6개 Parameter) ← 새로 추가**
+- **CloudWatch: 단일 (SNS + Metric Filter + Alarm) ← 새로 추가**
 
 **잘못된 순서로 실행 시:**
 - EKS를 VPC보다 먼저 실행 → 에러 (Subnet이 없음)
 - Secrets를 IAM보다 먼저 실행 → 에러 (EKS Node Role이 없음)
 - API Gateway를 NLB보다 먼저 실행 → 에러 (Target Group이 없음)
+- ParameterStore를 EKS보다 먼저 실행 → 에러 (Cluster Name 없음)
+- CloudWatch를 EKS보다 먼저 실행 → 에러 (Log Group 없음)
 
 ---
 
@@ -604,10 +608,97 @@ CLOUDFRONT_DOMAIN=$(cd erp-dev-Frontend && terraform output -raw cloudfront_doma
 
 ## Cognito
 USER_POOL_ID=$(cd erp-dev-Cognito && terraform output -raw user_pool_id)
+
+## Parameter Store
+PARAMETER_STORE_PARAMS=$(cd erp-dev-ParameterStore && terraform output -json parameters)
+
+## CloudWatch
+SNS_TOPIC_ARN=$(cd erp-dev-CloudWatch && terraform output -raw sns_topic_arn)
+ALARM_NAMES=$(cd erp-dev-CloudWatch && terraform output -json alarm_names)
 EOF
 
 cat terraform-outputs.txt
 ```
+
+---
+
+##  Step 12: Parameter Store 배포 (단일, 5분) ← 새로 추가
+
+### 12-1. Parameter Store 생성
+
+```bash
+cd erp-dev-ParameterStore
+
+terraform init
+terraform apply -auto-approve
+```
+
+**생성 리소스:**
+- /erp/dev/account-id (AWS Account ID)
+- /erp/dev/region (ap-northeast-2)
+- /erp/dev/eks/cluster-name (EKS Cluster Name)
+- /erp/dev/ecr/repository-prefix (erp)
+- /erp/dev/project-name (erp)
+- /erp/dev/environment (dev)
+
+**확인:**
+```bash
+terraform output
+# parameters = {
+#   account_id = "/erp/dev/account-id"
+#   region = "/erp/dev/region"
+#   ...
+# }
+```
+
+**용도:**
+- buildspec.yml에서 Parameter Store 값 사용
+- 하드코딩 제거
+- 환경별 설정 분리
+
+---
+
+##  Step 13: CloudWatch Alarm 배포 (단일, 5분) ← 새로 추가
+
+### 13-1. CloudWatch Alarm 생성
+
+```bash
+cd ../erp-dev-CloudWatch
+
+terraform init
+terraform apply -auto-approve
+```
+
+**생성 리소스:**
+- SNS Topic (erp-dev-alarms)
+- SNS Email Subscription (subinhong0109@dankook.ac.kr)
+- Metric Filter: ERROR 로그 감지
+- Metric Filter: Pod 재시작 감지
+- CloudWatch Alarm: ERROR 10회 이상 (5분)
+- CloudWatch Alarm: Pod 재시작 3회 이상 (10분)
+- CloudWatch Alarm: Lambda 에러율 5% 이상
+
+**확인:**
+```bash
+terraform output
+# sns_topic_arn = "arn:aws:sns:ap-northeast-2:xxx:erp-dev-alarms"
+# alarm_names = {
+#   error_alarm = "erp-dev-high-error-rate"
+#   restart_alarm = "erp-dev-pod-restarts"
+#   lambda_alarm = "erp-dev-lambda-error-rate"
+# }
+```
+
+**이메일 확인 필수:**
+1. subinhong0109@dankook.ac.kr 이메일 확인
+2. "AWS Notification - Subscription Confirmation" 이메일 열기
+3. "Confirm subscription" 링크 클릭
+4. 구독 확인 완료
+
+**용도:**
+- ERROR 로그 발생 시 이메일 알림
+- Pod 재시작 시 이메일 알림
+- Lambda 에러 발생 시 이메일 알림
 
 ---
 
