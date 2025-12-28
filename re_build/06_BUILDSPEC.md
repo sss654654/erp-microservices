@@ -1531,3 +1531,298 @@ cat 07_CODEPIPELINE.md
 ---
 
 **"7가지 CodePipeline 강점을 모두 구현했습니다. 이제 CGV와 대등한 수준입니다!"**
+
+
+---
+
+## 🔍 X-Ray 트러블슈팅 전체 과정 (실제 구현 기록)
+
+### ❌ **초기 문제: X-Ray 트레이스가 전송되지 않음**
+
+**증상:**
+```bash
+# X-Ray Daemon 로그 확인
+kubectl logs -n erp-dev xray-daemon-xxxxx
+
+# 출력:
+# [Info] Starting proxy http server on 0.0.0.0:2000
+# → 이후 아무 로그 없음 (트레이스 미수신)
+```
+
+**원인 분석:**
+1. ✅ X-Ray DaemonSet 정상 실행 (2개 Pod Running)
+2. ✅ 환경변수 설정됨 (`AWS_XRAY_DAEMON_ADDRESS`)
+3. ✅ pom.xml에 X-Ray SDK 존재
+4. ✅ XRayConfig.java 존재
+5. ❌ **Spring Boot 로그에 X-Ray 초기화 메시지 없음**
+
+### 🔧 **해결 과정**
+
+#### Step 1: XRayConfig에 로깅 추가
+
+**문제:** X-Ray가 초기화되는지 확인 불가
+
+**해결:**
+```java
+// XRayConfig.java
+@Configuration
+public class XRayConfig {
+    
+    private static final Logger logger = LoggerFactory.getLogger(XRayConfig.class);
+    
+    @PostConstruct
+    public void init() {
+        logger.info("=== X-Ray Configuration Initializing ===");
+        logger.info("X-Ray Daemon Address: {}", System.getenv("AWS_XRAY_DAEMON_ADDRESS"));
+        
+        AWSXRayRecorderBuilder builder = AWSXRayRecorderBuilder.standard();
+        AWSXRay.setGlobalRecorder(builder.build());
+        
+        logger.info("=== X-Ray Recorder Initialized Successfully ===");
+    }
+    
+    @Bean
+    public Filter TracingFilter() {
+        logger.info("=== X-Ray Servlet Filter Created ===");
+        return new AWSXRayServletFilter("approval-request-service");
+    }
+}
+```
+
+**결과:**
+```bash
+kubectl logs -n erp-dev approval-request-service-xxx --tail=100 | grep "=== X-Ray"
+
+# 출력:
+# === X-Ray Configuration Initializing ===
+# === X-Ray Recorder Initialized Successfully ===
+# === X-Ray Servlet Filter Created ===
+# ✅ X-Ray 초기화 확인!
+```
+
+#### Step 2: 실제 요청으로 트레이스 생성 테스트
+
+**문제:** employee-service (Lambda)로 요청 시 트레이스 미생성
+
+**원인:** Lambda는 별도 X-Ray 설정 필요, EKS 서비스만 테스트해야 함
+
+**해결:**
+```bash
+# approval-request-service에 직접 요청
+curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals
+
+# X-Ray Daemon 로그 확인
+kubectl logs -n erp-dev xray-daemon-xxxxx --since=30s
+
+# 출력:
+# [Info] Successfully sent batch of 1 segments (0.453 seconds)
+# ✅ 트레이스 전송 성공!
+```
+
+#### Step 3: 모든 서비스에 적용
+
+**작업 내용:**
+1. approval-processing-service/XRayConfig.java 업데이트
+2. notification-service/XRayConfig.java 업데이트
+3. 이미지 재빌드 & ECR 푸시
+4. Pod 재시작
+
+**결과:**
+```bash
+# 30개 요청 전송
+for i in {1..30}; do 
+  curl -s https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals > /dev/null
+  sleep 2
+done
+
+# X-Ray Daemon 로그
+kubectl logs -n erp-dev xray-daemon-xxxxx --since=2m
+
+# 출력:
+# [Info] Successfully sent batch of 1 segments (0.042 seconds)
+# [Info] Successfully sent batch of 1 segments (0.016 seconds)
+# [Info] Successfully sent batch of 1 segments (0.020 seconds)
+# ... (계속 전송 중)
+# ✅ 모든 서비스 트레이스 전송 성공!
+```
+
+---
+
+### 📊 **X-Ray vs CloudWatch Logs 차이점**
+
+| 항목 | CloudWatch Logs | X-Ray |
+|------|----------------|-------|
+| **목적** | 로그 저장 및 검색 | 분산 트레이싱 |
+| **수집 대상** | 텍스트 로그 (stdout/stderr) | HTTP 요청 흐름 |
+| **사용 시점** | 에러 로그 분석, 디버깅 | 성능 병목 분석, 서비스 의존성 파악 |
+| **시각화** | 텍스트 검색, 그래프 | Service Map (노드 + 엣지) |
+| **예시** | "ERROR: Connection failed" | "approval-request → employee (200ms)" |
+| **언제 사용?** | 무엇이 잘못되었는지 (What) | 어디가 느린지 (Where) |
+
+**실제 사용 예시:**
+
+**CloudWatch Logs:**
+```bash
+# 에러 로그 검색
+aws logs tail /aws/eks/erp-dev/application --since 1h | grep ERROR
+
+# 출력:
+# 2025-12-29 04:00:00 ERROR Connection to MongoDB failed
+# 2025-12-29 04:05:00 ERROR Kafka producer timeout
+# → 무엇이 잘못되었는지 파악
+```
+
+**X-Ray:**
+```
+AWS Console → X-Ray → Service Map
+
+클라이언트 → approval-request (1.2초) → MongoDB (0.8초)
+                    ↓
+              notification (0.3초) → Redis (0.1초)
+
+→ MongoDB 쿼리가 느림 (0.8초)
+→ 인덱스 추가 필요
+→ 어디가 느린지 파악
+```
+
+---
+
+### ✅ **X-Ray 동작 조건 (중요!)**
+
+X-Ray가 트레이스를 생성하려면:
+
+1. ✅ **Spring Boot에 X-Ray SDK 추가** (pom.xml)
+2. ✅ **XRayConfig.java 생성** (Filter 등록)
+3. ✅ **X-Ray DaemonSet 배포** (Helm Chart)
+4. ✅ **환경변수 설정** (AWS_XRAY_DAEMON_ADDRESS)
+5. ✅ **IAM 권한** (EKS Node Role에 XRay 권한)
+6. ✅ **실제 HTTP 요청** (트레이스는 요청이 있어야 생성됨)
+
+**주의:** X-Ray는 **HTTP 요청이 들어와야** 트레이스를 생성합니다!
+- Pod만 실행 중 → 트레이스 없음
+- API 요청 → 트레이스 생성 → X-Ray Daemon → AWS X-Ray
+
+---
+
+### 🎯 **Helm Chart vs CLI 작업 확인**
+
+**질문:** "헬름차트나 테라폼 코드에 추가하지않고 CLI로 작업한거 뭐 없지?"
+
+**답변:** ✅ **모든 작업이 Helm Chart 또는 Terraform에 포함되어 있습니다!**
+
+#### Helm Chart에 포함된 것:
+
+1. **xray-daemonset.yaml** (templates/)
+   ```yaml
+   apiVersion: apps/v1
+   kind: DaemonSet
+   metadata:
+     name: xray-daemon
+   ```
+   - ✅ Helm Chart에 포함
+   - ✅ `helm upgrade` 명령으로 배포
+
+2. **values-dev.yaml** (X-Ray 설정)
+   ```yaml
+   xray:
+     enabled: true
+     image:
+       repository: amazon/aws-xray-daemon
+       tag: latest
+   ```
+   - ✅ Helm Chart에 포함
+
+3. **서비스 환경변수** (values-dev.yaml)
+   ```yaml
+   services:
+     approvalRequest:
+       env:
+         - name: AWS_XRAY_DAEMON_ADDRESS
+           value: "xray-daemon.erp-dev.svc.cluster.local:2000"
+   ```
+   - ✅ Helm Chart에 포함
+
+#### Terraform에 포함된 것:
+
+1. **IAM 권한** (erp-dev-IAM/eks-node-role/)
+   ```hcl
+   resource "aws_iam_role_policy_attachment" "eks_node_xray" {
+     role       = aws_iam_role.eks_node.name
+     policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+   }
+   ```
+   - ✅ Terraform에 포함
+
+#### CLI로만 한 작업 (임시):
+
+1. **Pod 삭제 및 재시작**
+   ```bash
+   kubectl delete pods -n erp-dev -l app=approval-request-service
+   ```
+   - ⚠️ 임시 작업 (이미지 업데이트 후 재시작용)
+   - ✅ Helm Chart의 replicaCount가 자동으로 재생성
+
+2. **이미지 태그 변경 (테스트용)**
+   ```bash
+   kubectl set image deployment/approval-request-service ...
+   ```
+   - ⚠️ 임시 작업 (빠른 테스트용)
+   - ✅ 최종적으로 values-dev.yaml에 반영됨
+
+**결론:** ✅ **모든 X-Ray 설정이 Helm Chart에 포함되어 있으며, Git에 커밋되어 있습니다!**
+
+---
+
+### 📝 **최종 확인 체크리스트**
+
+#### Helm Chart 확인:
+```bash
+# X-Ray DaemonSet 템플릿 존재
+ls helm-chart/templates/xray-daemonset.yaml
+# ✅ 존재
+
+# values-dev.yaml에 X-Ray 설정 존재
+grep -A5 "xray:" helm-chart/values-dev.yaml
+# ✅ enabled: true, image, resources 설정됨
+
+# 서비스 환경변수 확인
+grep "AWS_XRAY_DAEMON_ADDRESS" helm-chart/values-dev.yaml
+# ✅ 3개 서비스 모두 설정됨
+```
+
+#### 코드 확인:
+```bash
+# 모든 서비스에 XRayConfig.java 존재
+find backend -name "XRayConfig.java"
+# ✅ approval-request, approval-processing, notification 모두 존재
+
+# pom.xml에 X-Ray SDK 존재
+grep "aws-xray-recorder-sdk-spring" backend/*/pom.xml
+# ✅ 3개 서비스 모두 존재
+```
+
+#### Git 확인:
+```bash
+# 모든 변경사항 커밋됨
+git log --oneline -5
+# bc95b68 feat: Complete X-Ray tracing for all services
+# 9bdb6d8 feat: Add X-Ray tracing with logging for debugging
+# 73342b6 fix: Initialize X-Ray recorder properly for Spring Boot 3.x
+# ✅ 모든 X-Ray 작업 커밋됨
+```
+
+---
+
+### 🎓 **면접 어필 포인트**
+
+**Q: X-Ray를 어떻게 구현했나요?**
+
+**A:** "4단계로 구현했습니다. 첫째, Spring Boot에 X-Ray SDK를 추가하고 XRayConfig로 Filter를 등록했습니다. 둘째, Helm Chart에 X-Ray DaemonSet을 추가하여 각 Node에서 트레이스를 수집하도록 했습니다. 셋째, EKS Node Role에 XRay 권한을 부여하여 AWS X-Ray로 데이터를 전송할 수 있게 했습니다. 넷째, 환경변수로 Daemon 주소를 설정하여 서비스가 트레이스를 전송하도록 했습니다. 결과적으로 Service Map에서 서비스 간 호출 흐름과 응답 시간을 시각화할 수 있게 되었습니다."
+
+**Q: CloudWatch Logs와 X-Ray의 차이는?**
+
+**A:** "CloudWatch Logs는 '무엇이' 잘못되었는지 파악하는 도구이고, X-Ray는 '어디가' 느린지 파악하는 도구입니다. CloudWatch Logs로 ERROR 로그를 검색하여 문제를 찾고, X-Ray Service Map으로 병목 지점을 찾아 성능을 최적화합니다. 두 도구를 함께 사용하여 완전한 모니터링 체계를 구축했습니다."
+
+---
+
+**"X-Ray 완벽 구현 완료! 이제 마이크로서비스 흐름을 한눈에 볼 수 있습니다!"** 🎉
