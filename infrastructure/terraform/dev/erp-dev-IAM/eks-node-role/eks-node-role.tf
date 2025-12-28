@@ -58,3 +58,23 @@ resource "aws_iam_role_policy" "eks_node_secrets_manager" {
     }]
   })
 }
+
+# CloudWatch Logs 권한 (Fluent Bit용)
+resource "aws_iam_role_policy" "eks_node_cloudwatch_logs" {
+  role = aws_iam_role.eks_node.name
+  name = "eks-node-cloudwatch-logs-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ]
+      Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.project_name}-${var.environment}/*"
+    }]
+  })
+}
