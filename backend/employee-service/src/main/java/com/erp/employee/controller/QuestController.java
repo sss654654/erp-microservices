@@ -158,7 +158,7 @@ public class QuestController {
         quest.setDescription((String) body.get("description"));
         quest.setRewardDays(((Number) body.get("rewardDays")).doubleValue());
         quest.setDepartment((String) body.get("department"));
-        quest.setCreatedBy(((Number) body.get("createdBy")).longValue());
+        quest.setCreatedBy(body.get("createdBy") != null ? ((Number) body.get("createdBy")).longValue() : 1L);
         quest.setStatus("AVAILABLE");
         
         Quest saved = questRepository.save(quest);
