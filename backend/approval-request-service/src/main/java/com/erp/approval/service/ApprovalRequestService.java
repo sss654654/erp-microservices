@@ -42,6 +42,11 @@ public class ApprovalRequestService {
     }
     
     public ApprovalRequest createApproval(CreateApprovalRequest request) {
+        // requesterId null 체크
+        if (request.getRequesterId() == null) {
+            throw new IllegalArgumentException("requesterId is required");
+        }
+        
         // 1. 직원 검증
         employeeClient.validateEmployee(request.getRequesterId().longValue());
         for (CreateApprovalRequest.StepRequest step : request.getSteps()) {
