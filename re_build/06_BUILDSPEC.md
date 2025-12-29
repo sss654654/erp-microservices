@@ -1,22 +1,17 @@
 # 06. buildspec.yml 작성 (CodePipeline 강점 극대화)
 
-**소요 시간**: 3시간  
-**목표**: 7가지 CodePipeline 강점을 모두 구현
+**소요 시간**: 4시간  
+**목표**: CloudWatch Logs, X-Ray, CloudWatch Alarm 구축 완료
 
 ---
 
-##  06단계에서 구현할 기능
+## 📋 목차
 
-### CGV와 차별화 (4가지)
-
-| 기능 | CGV (GitLab CI) | ERP (CodePipeline) | 구현 위치 |
-|------|----------------|-------------------|----------|
-| Secret 관리 | GitLab Variables |  AWS Secrets Manager | 01단계 완료 |
-| 단일 파이프라인 | 서비스별 독립 |  Helm Chart 통합 | 05단계 완료 |
-| **설정 관리** | **하드코딩** | ** Parameter Store** | **Step 1** |
-| **로그 관리** | **GitLab Logs** | ** CloudWatch Logs** | **Step 2** |
-| **트레이싱** | **없음** | ** X-Ray 통합** | **Step 3** |
-| **이미지 스캔 + 변경 감지** | **수동 + 전체 빌드** | ** ECR 스캔 + Git diff** | **Step 4** |
+1. [Step 1: Parameter Store 활용](#step-1-parameter-store-활용)
+2. [Step 2: CloudWatch Logs 중앙 집중](#step-2-cloudwatch-logs-중앙-집중)
+3. [Step 3: X-Ray 트레이싱 통합](#step-3-x-ray-트레이싱-통합)
+4. [Step 4: CloudWatch Alarm 추가](#step-4-cloudwatch-alarm-추가)
+5. [실제 동작 시나리오](#실제-동작-시나리오)
 
 ---
 
@@ -24,122 +19,67 @@
 
 ### 1-1. 왜 필요한가?
 
-**현재 문제:**
+**Before (하드코딩):**
 ```yaml
-# buildspec.yml 하드코딩
 env:
   variables:
-    AWS_ACCOUNT_ID: "806332783810"      #  계정 변경 시 수정 필요
-    AWS_REGION: "ap-northeast-2"        #  환경별 분리 불가
-    EKS_CLUSTER_NAME: "erp-dev"         #  Git에 노출
+    AWS_ACCOUNT_ID: "806332783810"
+    EKS_CLUSTER_NAME: "erp-dev"
 ```
 
-**Parameter Store 사용 시:**
+**After (Parameter Store):**
 ```yaml
 env:
   parameter-store:
-    AWS_ACCOUNT_ID: /erp/dev/account-id              #  중앙 관리
-    AWS_REGION: /erp/dev/region                      #  환경별 분리
-    EKS_CLUSTER_NAME: /erp/dev/eks/cluster-name      #  Git에 안전
+    AWS_ACCOUNT_ID: /erp/dev/account-id
+    EKS_CLUSTER_NAME: /erp/dev/eks/cluster-name
 ```
 
-### 1-2. Terraform으로 Parameter 생성
+### 1-2. Terraform으로 생성
 
 ```bash
 cd infrastructure/terraform/dev/erp-dev-ParameterStore
-
 terraform init
 terraform apply -auto-approve
 ```
 
-**생성되는 6개 Parameter:**
-```
-/erp/dev/account-id              # data.aws_caller_identity로 자동
-/erp/dev/region                  # ap-northeast-2
-/erp/dev/eks/cluster-name        # remote_state.eks로 자동
-/erp/dev/ecr/repository-prefix   # erp
-/erp/dev/project-name            # erp
-/erp/dev/environment             # dev
-```
+**생성된 6개 Parameter:**
+- `/erp/dev/account-id` - AWS Account ID
+- `/erp/dev/region` - ap-northeast-2
+- `/erp/dev/eks/cluster-name` - erp-dev
+- `/erp/dev/ecr/repository-prefix` - erp
+- `/erp/dev/project-name` - erp
+- `/erp/dev/environment` - dev
 
 **확인:**
 ```bash
-terraform output
-```
-
-### 1-3. CodeBuild Role 권한 확인
-
-**이미 02_TERRAFORM.md에서 완료:**
-```bash
-aws iam list-role-policies --role-name erp-dev-codebuild-role --region ap-northeast-2
-# codebuild-ssm-policy 
+aws ssm get-parameter --name /erp/dev/eks/cluster-name --region ap-northeast-2
 ```
 
 ---
 
 ## Step 2: CloudWatch Logs 중앙 집중 (30분)
 
-### 2-1. 개념 이해: CloudWatch Logs가 뭔가요?
+### 2-1. 개념: CloudWatch Logs란?
 
-**쉽게 설명하면:**
-- Pod는 컨테이너 안에서 실행되는 프로그램입니다
-- 프로그램이 실행되면 로그(기록)가 생성됩니다
-- 이 로그를 어디에 저장할까요?
-
-**현재 상황 (문제):**
+**문제:**
 ```
-Pod 안에만 로그 저장
-    ↓
-Pod 재시작 → 로그 사라짐 
-Pod 여러 개 → 각각 확인해야 함 
+Pod 재시작 → 로그 사라짐
+Pod 10개 → 각각 확인해야 함
 ```
 
-**CloudWatch Logs 사용 (해결):**
+**해결:**
 ```
-Pod 로그 → Fluent Bit → CloudWatch Logs (AWS 저장소)
-    ↓
-Pod 재시작해도 로그 유지 
-모든 Pod 로그 한 곳에서 검색 
-```
-
-### 2-2. 실제 예시로 이해하기
-
-**시나리오: 에러 발생 시**
-
-**Before (CloudWatch 없음):**
-```bash
-# 1. 어느 Pod에서 에러 났는지 모름
-kubectl get pods -n erp-dev
-# approval-request-service-abc123
-# approval-request-service-def456
-
-# 2. 각 Pod 로그 일일이 확인
-kubectl logs approval-request-service-abc123 -n erp-dev
-kubectl logs approval-request-service-def456 -n erp-dev
-
-# 3. Pod 재시작되면 로그 사라짐
-kubectl delete pod approval-request-service-abc123 -n erp-dev
-# 로그 영구 소실 
+Pod → Fluent Bit → CloudWatch Logs
+→ 영구 보관
+→ 통합 검색
 ```
 
-**After (CloudWatch 사용):**
-```bash
-# 1. AWS Console → CloudWatch Logs
-# 2. /aws/eks/erp-dev/application 클릭
-# 3. 검색창에 "ERROR" 입력
-# 4. 모든 Pod의 에러 로그가 한 번에 검색됨 
-# 5. Pod 재시작해도 로그 유지 
-```
+### 2-2. 구성 요소
 
-### 2-3. 구성 요소 3가지
+#### ① IAM 권한 (EKS Node → CloudWatch)
 
-#### ① IAM 권한 (EKS Node가 CloudWatch에 쓸 수 있게)
-
-**왜 필요한가?**
-- EKS Node(서버)가 CloudWatch에 로그를 보내려면 권한 필요
-- 집에 택배 보내려면 주소 알아야 하는 것과 같음
-
-**설정 내용:**
+**Terraform 코드:**
 ```hcl
 # infrastructure/terraform/dev/erp-dev-IAM/eks-node-role/eks-node-role.tf
 resource "aws_iam_role_policy" "eks_node_cloudwatch_logs" {
@@ -150,43 +90,24 @@ resource "aws_iam_role_policy" "eks_node_cloudwatch_logs" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "logs:CreateLogGroup",      # 로그 그룹 만들기
-        "logs:CreateLogStream",     # 로그 스트림 만들기
-        "logs:PutLogEvents",        # 로그 쓰기
-        "logs:DescribeLogStreams"   # 로그 스트림 확인
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
       ]
-      Resource = "arn:aws:logs:ap-northeast-2:806332783810:log-group:/aws/eks/erp-dev/*"
+      Resource = "arn:aws:logs:*:*:log-group:/aws/eks/erp-dev/*"
     }]
   })
 }
 ```
 
-**확인 방법:**
-```bash
-# IAM 권한 확인
-aws iam list-role-policies --role-name erp-dev-eks-node-role --region ap-northeast-2
+#### ② Fluent Bit DaemonSet
 
-# 출력에 "eks-node-cloudwatch-logs-policy" 있으면 성공 
-```
-
-#### ② Fluent Bit (로그 수집기)
-
-**왜 필요한가?**
-- Pod 로그를 자동으로 CloudWatch로 보내주는 프로그램
-- 우체부가 편지를 수거해서 우체국으로 보내는 것과 같음
-
-**동작 방식:**
-```
-1. Fluent Bit이 각 Node에 1개씩 실행됨 (DaemonSet)
-2. 해당 Node의 모든 Pod 로그를 읽음
-3. CloudWatch Logs로 전송
-```
-
-**설정 내용:**
+**Helm Chart:**
 ```yaml
 # helm-chart/templates/fluent-bit.yaml
 apiVersion: apps/v1
-kind: DaemonSet  # 각 Node에 1개씩 실행
+kind: DaemonSet
 metadata:
   name: fluent-bit
   namespace: amazon-cloudwatch
@@ -195,385 +116,73 @@ spec:
     spec:
       containers:
       - name: fluent-bit
-        image: public.ecr.aws/aws-observability/aws-for-fluent-bit:latest
+        image: amazon/aws-for-fluent-bit:2.31.12
         env:
         - name: AWS_REGION
           value: ap-northeast-2
-        - name: CLUSTER_NAME
-          value: erp-dev
         - name: LOG_GROUP_NAME
           value: /aws/eks/erp-dev/application
 ```
 
-**확인 방법:**
+**배포:**
 ```bash
-# Fluent Bit Pod 확인
+helm upgrade --install erp-microservices helm-chart/ \
+  -f helm-chart/values-dev.yaml -n erp-dev
+```
+
+#### ③ CloudWatch Log Group
+
+**자동 생성:**
+```
+/aws/eks/erp-dev/application
+├── approval-request-service-xxx (Log Stream)
+├── approval-processing-service-xxx
+├── notification-service-xxx
+└── kafka-xxx
+```
+
+### 2-3. 확인 방법
+
+```bash
+# 1. Fluent Bit Pod 확인
 kubectl get pods -n amazon-cloudwatch
+# fluent-bit-xxxxx   1/1     Running
 
-# 출력 예시:
-# NAME               READY   STATUS    RESTARTS   AGE
-# fluent-bit-xxxxx   1/1     Running   0          10m
-# fluent-bit-yyyyy   1/1     Running   0          10m
-# → Node 2개이므로 Pod 2개 
-
-# Fluent Bit 로그 확인 (정상 동작 여부)
-kubectl logs -n amazon-cloudwatch -l app.kubernetes.io/name=fluent-bit --tail=20
-
-# 출력에 "Fluent Bit v2.x started" 있으면 성공 
-```
-
-#### ③ CloudWatch Log Group (로그 저장소)
-
-**왜 필요한가?**
-- 로그를 저장할 폴더 같은 것
-- 서비스별로 폴더를 나눠서 관리
-
-**구조:**
-```
-/aws/eks/erp-dev/application (Log Group)
-├── approval-request-service-abc123 (Log Stream)
-│   └── 2025-12-28 16:00:00 [INFO] Started application
-│   └── 2025-12-28 16:00:01 [ERROR] Connection failed
-├── approval-request-service-def456 (Log Stream)
-│   └── 2025-12-28 16:00:00 [INFO] Started application
-└── notification-service-xyz789 (Log Stream)
-    └── 2025-12-28 16:00:00 [INFO] WebSocket connected
-```
-
-**확인 방법:**
-```bash
-# CloudWatch Log Group 확인
+# 2. Log Group 확인
 aws logs describe-log-groups \
   --log-group-name-prefix /aws/eks/erp-dev \
-  --region ap-northeast-2 \
-  --query 'logGroups[*].logGroupName' \
-  --output table
+  --region ap-northeast-2
 
-# 출력 예시:
-# --------------------------------
-# |   DescribeLogGroups          |
-# +------------------------------+
-# |  /aws/eks/erp-dev/application|
-# +------------------------------+
-#  Log Group 생성됨
-
-# Log Stream 확인 (Pod별 로그)
-aws logs describe-log-streams \
-  --log-group-name /aws/eks/erp-dev/application \
-  --region ap-northeast-2 \
-  --max-items 5 \
-  --query 'logStreams[*].logStreamName' \
-  --output table
-
-# 출력 예시:
-# ------------------------------------------------
-# |   DescribeLogStreams                         |
-# +----------------------------------------------+
-# |  approval-request-service-abc123             |
-# |  approval-request-service-def456             |
-# |  notification-service-xyz789                 |
-# +----------------------------------------------+
-#  Pod별 Log Stream 생성됨
-```
-
-### 2-4. 실제 로그 확인하기
-
-#### 방법 1: AWS CLI (터미널)
-
-```bash
-# 최근 5분 로그 확인
+# 3. 실제 로그 확인
 aws logs tail /aws/eks/erp-dev/application --since 5m --region ap-northeast-2
-
-# 실시간 로그 스트리밍 (계속 보기)
-aws logs tail /aws/eks/erp-dev/application --follow --region ap-northeast-2
-
-# 특정 키워드 검색 (ERROR만)
-aws logs tail /aws/eks/erp-dev/application --since 1h --region ap-northeast-2 | grep ERROR
-```
-
-#### 방법 2: AWS Console (웹)
-
-```
-1. AWS Console 로그인
-2. CloudWatch 서비스 클릭
-3. 왼쪽 메뉴 → Logs → Log groups
-4. /aws/eks/erp-dev/application 클릭
-5. Log streams에서 Pod 선택
-6. 로그 확인
-
-검색 기능:
-- Filter events 입력창에 "ERROR" 입력
-- 모든 Pod의 에러 로그가 한 번에 검색됨 
-```
-
-#### 방법 3: CloudWatch Insights (고급 검색)
-
-```
-1. CloudWatch → Logs → Insights
-2. Log group 선택: /aws/eks/erp-dev/application
-3. 쿼리 입력:
-
-# 최근 1시간 에러 로그 개수
-fields @timestamp, @message
-| filter @message like /ERROR/
-| stats count() by bin(5m)
-
-# 서비스별 에러 개수
-fields @timestamp, @message
-| filter @message like /ERROR/
-| parse @logStream /(?<service>[^-]+)-service/
-| stats count() by service
-```
-
-### 2-5. 완료 확인 체크리스트
-
-```bash
-#  1. IAM 권한 확인
-aws iam list-role-policies --role-name erp-dev-eks-node-role --region ap-northeast-2 | grep cloudwatch
-
-#  2. Fluent Bit Pod 확인
-kubectl get pods -n amazon-cloudwatch
-# 2개 Pod Running 확인
-
-#  3. CloudWatch Log Group 확인
-aws logs describe-log-groups --log-group-name-prefix /aws/eks/erp-dev --region ap-northeast-2
-
-#  4. Log Stream 확인 (Pod별 로그)
-aws logs describe-log-streams --log-group-name /aws/eks/erp-dev/application --region ap-northeast-2 --max-items 5
-
-#  5. 실제 로그 확인
-aws logs tail /aws/eks/erp-dev/application --since 5m --region ap-northeast-2
-```
-
-### 2-6. 왜 이게 중요한가? (실무 관점)
-
-**시나리오 1: 새벽 3시 장애 발생**
-```
-Before:
-- 새벽에 Pod 재시작됨
-- 아침에 출근해서 확인하려니 로그 사라짐 
-- 원인 파악 불가
-
-After:
-- CloudWatch에 모든 로그 저장됨
-- 아침에 출근해서 CloudWatch 확인
-- 새벽 3시 로그 그대로 남아있음 
-- 원인 파악 가능
-```
-
-**시나리오 2: 특정 에러 패턴 찾기**
-```
-Before:
-- 10개 Pod 로그를 일일이 확인
-- kubectl logs 10번 실행
-- 시간 낭비
-
-After:
-- CloudWatch Insights 쿼리 1번
-- 모든 Pod에서 에러 패턴 검색
-- 1분 안에 완료 
-```
-
-**시나리오 3: 알람 설정 (선택 사항)**
-```
-CloudWatch Logs → CloudWatch Alarm
-- "ERROR" 키워드가 10번 이상 나오면
-- Slack/Email 알람 발송
-- 자동 모니터링 
-
-참고: 알람 설정은 현재 프로젝트 범위에 포함되지 않음
 ```
 
 ---
 
-### 2-7. Step 2 완료 확인 및 정리
+## Step 3: X-Ray 트레이싱 통합 (60분)
 
-#### 완료된 작업 체크리스트
-
-```bash
-# 1. IAM 권한 확인
-aws iam list-role-policies --role-name erp-dev-eks-node-role --region ap-northeast-2 | grep cloudwatch
-# 출력: eks-node-cloudwatch-logs-policy
-
-# 2. Fluent Bit Pod 확인
-kubectl get pods -n amazon-cloudwatch
-# 출력: fluent-bit-xxxxx 2개 Running
-
-# 3. CloudWatch Log Group 확인
-aws logs describe-log-groups --log-group-name /aws/eks/erp-dev/application --region ap-northeast-2
-# 출력: logGroupName: /aws/eks/erp-dev/application
-
-# 4. Log Stream 확인 (Pod별 로그)
-aws logs describe-log-streams --log-group-name /aws/eks/erp-dev/application --region ap-northeast-2 --max-items 5
-# 출력: Pod별 Log Stream 목록
-
-# 5. 실제 로그 확인
-aws logs tail /aws/eks/erp-dev/application --since 5m --region ap-northeast-2
-# 출력: 최근 5분간의 로그
-```
-
-#### 현재 Log Group 구조
-
-```
-AWS CloudWatch Logs
-├── /aws/eks/erp-dev/application (EKS Pod 로그)
-│   ├── fluentbit-kube...approval-request-service-xxx (Pod 1)
-│   ├── fluentbit-kube...approval-request-service-yyy (Pod 2)
-│   ├── fluentbit-kube...approval-processing-service-xxx (Pod 1)
-│   ├── fluentbit-kube...approval-processing-service-yyy (Pod 2)
-│   ├── fluentbit-kube...notification-service-xxx (Pod 1)
-│   └── fluentbit-kube...notification-service-yyy (Pod 2)
-│
-├── /aws/lambda/erp-dev-employee-service (Lambda 로그)
-│   └── Lambda 실행마다 자동 생성
-│
-└── /aws/apigateway/erp-dev-api (API Gateway 로그, 선택)
-    └── API 요청 로그
-```
-
-#### 로그 흐름 정리
-
-**EKS Pod 로그:**
-```
-1. Pod가 stdout/stderr로 로그 출력
-   예: System.out.println("Hello")
-
-2. Kubernetes가 /var/log/containers/*.log에 저장
-
-3. Fluent Bit (DaemonSet)이 해당 파일 읽음
-   - 각 Node에 1개씩 실행
-   - 해당 Node의 모든 Pod 로그 수집
-
-4. CloudWatch Logs로 전송
-   - Log Group: /aws/eks/erp-dev/application
-   - Log Stream: Pod별로 자동 생성
-
-5. API 요청 시 실시간으로 로그 쌓임
-   - Pod 재시작해도 로그 유지
-   - 영구 보관 (만료 없음)
-```
-
-**Lambda 로그:**
-```
-1. Lambda 함수 실행
-2. CloudWatch Logs 자동 전송 (내장 기능)
-3. Log Group: /aws/lambda/erp-dev-employee-service
-4. Log Stream: 실행마다 자동 생성
-```
-
-#### 트러블슈팅 기록
-
-**문제: 로그가 안 쌓임**
-```
-증상: 마지막 이벤트 시간이 4시간 전에 멈춤
-
-원인: Fluent Bit이 잘못된 Log Group에 쓰려고 시도
-- 시도: /aws/eks/erp-dev (틀림)
-- 정상: /aws/eks/erp-dev/application (맞음)
-
-해결:
-1. helm-chart/values-dev.yaml 수정
-   logGroupName: /aws/eks/erp-dev/application
-
-2. Helm 재배포
-   helm upgrade --install erp-microservices helm-chart/ -f helm-chart/values-dev.yaml -n erp-dev
-
-3. Fluent Bit 재시작
-   kubectl rollout restart daemonset fluent-bit -n amazon-cloudwatch
-
-4. 확인
-   kubectl logs -n amazon-cloudwatch fluent-bit-xxxxx --tail=20
-   출력: "Created log stream..." 메시지 확인
-```
-
-#### Step 2 완료!
-
-CloudWatch Logs 설정이 완료되었습니다.
-
-**달성한 것:**
-- EKS Pod 로그 중앙 집중화
-- Pod 재시작해도 로그 유지
-- 모든 Pod 로그 통합 검색 가능
-- Lambda 로그 자동 수집
-
-**다음 단계:**
-- Step 3: X-Ray 트레이싱 통합
-
----
-
-## Step 3: X-Ray 트레이싱 통합 (40분)
-
-### 3-1. 개념 이해: X-Ray가 뭔가요?
-
-**쉽게 설명하면:**
-- 마이크로서비스는 여러 서비스가 서로 호출합니다
-- 사용자 요청이 어떤 경로로 흘러가는지 추적하는 도구
-
-**예시: 결재 요청 흐름**
-```
-사용자 → API Gateway → approval-request-service → employee-service (Lambda) → RDS
-                              ↓
-                       notification-service → Redis
-```
+### 3-1. 개념: X-Ray란?
 
 **문제:**
-- 어느 서비스가 느린지 모름
-- 에러가 어디서 발생했는지 모름
-- 병목 지점을 찾을 수 없음
-
-**X-Ray 사용 시:**
 ```
-Service Map (시각화):
-┌─────────────┐     ┌──────────────┐     ┌──────────┐
-│ API Gateway │ →   │ approval-req │ →   │ employee │
-│   50ms      │     │    200ms     │     │  150ms   │
-└─────────────┘     └──────────────┘     └──────────┘
-                            ↓
-                    ┌──────────────┐
-                    │ notification │
-                    │    100ms     │
-                    └──────────────┘
-
-→ approval-request-service가 가장 느림 (200ms)
-→ 여기를 최적화하면 전체 성능 향상 
-```
-
-### 3-2. 실제 예시로 이해하기
-
-**시나리오: 사용자가 "결재 요청" 버튼 클릭**
-
-**Before (X-Ray 없음):**
-```
-사용자: "왜 이렇게 느려요?"
+사용자: "왜 느려요?"
 개발자: "어디가 느린지 모르겠는데요..."
-→ 각 서비스 로그 일일이 확인
-→ 시간 낭비
 ```
 
-**After (X-Ray 사용):**
+**해결:**
 ```
-X-Ray Service Map 확인:
-- API Gateway: 50ms 
-- approval-request: 200ms  (느림!)
-- employee (Lambda): 150ms 
-- notification: 100ms 
-
-→ approval-request-service가 문제
-→ 코드 확인 → MongoDB 쿼리 최적화
-→ 200ms → 80ms 개선 
+X-Ray Service Map:
+클라이언트 → approval-request (1.2초) → MongoDB (0.8초)
+                    ↓
+              employee (Lambda, 0.03초)
 ```
 
-### 3-3. 구성 요소 4가지
+### 3-2. 구성 요소
 
-#### ① Spring Boot X-Ray SDK (코드에 추가)
+#### ① Spring Boot X-Ray SDK
 
-**왜 필요한가?**
-- 서비스가 X-Ray에 트레이스를 보내려면 SDK 필요
-- 택배 보내려면 택배 상자가 필요한 것과 같음
-
-**설정 내용:**
+**pom.xml:**
 ```xml
-<!-- pom.xml -->
 <dependency>
     <groupId>com.amazonaws</groupId>
     <artifactId>aws-xray-recorder-sdk-spring</artifactId>
@@ -581,52 +190,41 @@ X-Ray Service Map 확인:
 </dependency>
 ```
 
+**XRayConfig.java:**
 ```java
-// XRayConfig.java
 @Configuration
 public class XRayConfig {
+    
+    private static final Logger logger = LoggerFactory.getLogger(XRayConfig.class);
+    
+    @PostConstruct
+    public void init() {
+        logger.info("=== X-Ray Configuration Initializing ===");
+        AWSXRayRecorderBuilder builder = AWSXRayRecorderBuilder.standard();
+        AWSXRay.setGlobalRecorder(builder.build());
+        logger.info("=== X-Ray Recorder Initialized Successfully ===");
+    }
+    
     @Bean
     public Filter TracingFilter() {
+        logger.info("=== X-Ray Servlet Filter Created ===");
         return new AWSXRayServletFilter("approval-request-service");
     }
 }
 ```
 
-**동작 방식:**
-```
-1. 사용자 요청 들어옴
-2. AWSXRayServletFilter가 요청 시작 시간 기록
-3. 서비스 처리
-4. 요청 종료 시간 기록
-5. X-Ray Daemon으로 전송
-```
+**적용 서비스:**
+- ✅ approval-request-service
+- ✅ approval-processing-service
+- ✅ notification-service
 
-**확인 방법:**
-```bash
-# 서비스 로그에서 X-Ray 초기화 확인
-kubectl logs -n erp-dev -l app=approval-request-service --tail=50 | grep -i xray
+#### ② X-Ray DaemonSet
 
-# 출력 예시:
-# [INFO] AWS X-Ray Recorder initialized
-#  X-Ray SDK 정상 동작
-```
-
-#### ② X-Ray Daemon (트레이스 수집기)
-
-**왜 필요한가?**
-- 서비스가 보낸 트레이스를 AWS X-Ray로 전달
-- 우체부가 편지를 수거해서 우체국으로 보내는 것과 같음
-
-**동작 방식:**
-```
-Service → X-Ray Daemon (UDP 2000) → AWS X-Ray
-```
-
-**설정 내용:**
+**Helm Chart:**
 ```yaml
-# X-Ray DaemonSet
+# helm-chart/templates/xray-daemonset.yaml
 apiVersion: apps/v1
-kind: DaemonSet  # 각 Node에 1개씩
+kind: DaemonSet
 metadata:
   name: xray-daemon
   namespace: erp-dev
@@ -641,64 +239,10 @@ spec:
           protocol: UDP
 ```
 
-**확인 방법:**
-```bash
-# X-Ray Daemon Pod 확인
-kubectl get pods -n erp-dev -l app=xray-daemon
+#### ③ 환경변수 설정
 
-# 출력 예시:
-# NAME                READY   STATUS    RESTARTS   AGE
-# xray-daemon-xxxxx   1/1     Running   0          10m
-# xray-daemon-yyyyy   1/1     Running   0          10m
-# → Node 2개이므로 Pod 2개 
-
-# X-Ray Daemon 로그 확인
-kubectl logs -n erp-dev -l app=xray-daemon --tail=20
-
-# 출력 예시:
-# [Info] Initializing AWS X-Ray daemon 3.6.1
-# [Info] Using region: ap-northeast-2
-# [Info] Starting proxy http server on 0.0.0.0:2000
-#  X-Ray Daemon 정상 실행
-```
-
-#### ③ IAM 권한 (X-Ray Daemon이 AWS X-Ray에 쓸 수 있게)
-
-**왜 필요한가?**
-- X-Ray Daemon이 AWS X-Ray로 트레이스를 보내려면 권한 필요
-
-**설정 내용:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": [
-      "xray:PutTraceSegments",      # 트레이스 보내기
-      "xray:PutTelemetryRecords"    # 텔레메트리 보내기
-    ],
-    "Resource": "*"
-  }]
-}
-```
-
-**확인 방법:**
-```bash
-# IAM 권한 확인
-aws iam list-attached-role-policies --role-name erp-dev-eks-node-role --region ap-northeast-2
-
-# 출력에 "XRayDaemonPolicy" 있으면 성공 
-```
-
-#### ④ 환경변수 (서비스가 X-Ray Daemon 주소 알게)
-
-**왜 필요한가?**
-- 서비스가 X-Ray Daemon에 트레이스를 보내려면 주소 필요
-- 편지 보내려면 우체통 위치 알아야 하는 것과 같음
-
-**설정 내용:**
+**Helm values-dev.yaml:**
 ```yaml
-# helm-chart/values-dev.yaml
 services:
   approvalRequest:
     env:
@@ -706,817 +250,380 @@ services:
         value: "xray-daemon.erp-dev.svc.cluster.local:2000"
 ```
 
-**확인 방법:**
-```bash
-# 서비스 환경변수 확인
-kubectl get deployment approval-request-service -n erp-dev \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="AWS_XRAY_DAEMON_ADDRESS")]}'
-
-# 출력 예시:
-# {"name":"AWS_XRAY_DAEMON_ADDRESS","value":"xray-daemon.erp-dev.svc.cluster.local:2000"}
-#  환경변수 설정됨
-```
-
-### 3-4. 실제 트레이스 확인하기
-
-#### 방법 1: AWS Console (웹) - 추천!
-
-```
-1. AWS Console 로그인
-2. X-Ray 서비스 클릭
-3. Service Map 클릭
-
-Service Map (서비스 맵):
-┌─────────────┐     ┌──────────────┐     ┌──────────┐
-│ API Gateway │ →   │ approval-req │ →   │ employee │
-│   50ms      │     │    200ms     │     │  150ms   │
-│   100 req   │     │   100 req    │     │  100 req │
-│   0% error  │     │   2% error   │     │  0% error│
-└─────────────┘     └──────────────┘     └──────────┘
-
-→ approval-request-service에서 2% 에러 발생 
-→ 클릭해서 상세 확인
-
-4. Traces 클릭
-
-개별 요청 추적:
-Request ID: abc123
-Total Duration: 500ms
-├─ API Gateway: 50ms
-├─ approval-request-service: 200ms
-│  ├─ MongoDB query: 150ms  (느림!)
-│  └─ Kafka publish: 50ms
-├─ employee-service (Lambda): 150ms
-└─ notification-service: 100ms
-
-→ MongoDB 쿼리가 병목 지점
-→ 인덱스 추가로 최적화 필요
-```
-
-#### 방법 2: AWS CLI (터미널)
+#### ④ Lambda X-Ray 활성화
 
 ```bash
-# Service Graph 조회
-aws xray get-service-graph \
-  --start-time $(date -u -d '5 minutes ago' +%s) \
-  --end-time $(date -u +%s) \
+# Lambda X-Ray 활성화
+aws lambda update-function-configuration \
+  --function-name erp-dev-employee-service \
+  --tracing-config Mode=Active \
   --region ap-northeast-2
 
-# Trace 조회
-aws xray get-trace-summaries \
-  --start-time $(date -u -d '5 minutes ago' +%s) \
-  --end-time $(date -u +%s) \
+# Lambda Role에 X-Ray 권한 추가
+aws iam attach-role-policy \
+  --role-name erp-dev-lambda-role \
+  --policy-arn arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess \
   --region ap-northeast-2
 ```
 
-### 3-5. 트레이스 생성하기 (테스트)
+### 3-3. X-Ray 추적 범위
 
-**중요: X-Ray는 요청이 있어야 트레이스 생성됨**
+#### ✅ **추적 가능 (HTTP 기반)**
 
-```bash
-# 테스트 요청 보내기
-curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/employees
-curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals
-
-# 1~2분 후 AWS Console → X-Ray → Service Map 확인
-# 트레이스가 나타남 
+**1. approval-request-service (EKS)**
+```
+클라이언트 → approval-request-service (HTTP)
+→ X-Ray Servlet Filter 자동 추적
 ```
 
-### 3-6. 완료 확인 체크리스트
+**2. employee-service (Lambda)**
+```
+클라이언트 → employee-service (Lambda)
+→ Lambda X-Ray 자동 추적
+```
+
+#### ❌ **추적 불가 (Kafka 기반)**
+
+**approval-processing-service**
+```
+Kafka Consumer만 있음 (HTTP 요청 없음)
+→ X-Ray Servlet Filter 작동 안 함
+→ CloudWatch Logs로 모니터링
+```
+
+### 3-4. 확인 방법
 
 ```bash
-#  1. X-Ray Daemon Pod 확인
+# 1. X-Ray Daemon Pod 확인
 kubectl get pods -n erp-dev -l app=xray-daemon
-# 2개 Pod Running 확인
+# xray-daemon-xxxxx   1/1     Running
 
-#  2. X-Ray Service 확인
-kubectl get svc xray-daemon -n erp-dev
-# ClusterIP, UDP 2000 확인
+# 2. 서비스 X-Ray 초기화 확인
+kubectl logs -n erp-dev -l app=approval-request-service | grep "X-Ray"
+# === X-Ray Configuration Initializing ===
+# === X-Ray Recorder Initialized Successfully ===
 
-#  3. 서비스 환경변수 확인
-kubectl get deployment approval-request-service -n erp-dev \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="AWS_XRAY_DAEMON_ADDRESS")]}'
-# xray-daemon.erp-dev.svc.cluster.local:2000 확인
-
-#  4. IAM 권한 확인
-aws iam list-attached-role-policies --role-name erp-dev-eks-node-role --region ap-northeast-2 | grep XRay
-# XRayDaemonPolicy 확인
-
-#  5. X-Ray Daemon 로그 확인
+# 3. 트레이스 전송 확인
 kubectl logs -n erp-dev -l app=xray-daemon --tail=20
-# "Starting proxy http server on 0.0.0.0:2000" 확인
+# [Info] Successfully sent batch of 1 segments (0.022 seconds)
 
-#  6. 테스트 요청 보내기
-curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/employees
-
-#  7. AWS Console → X-Ray → Service Map 확인
-# 1~2분 후 트레이스 나타남
-```
-
-### 3-7. 왜 이게 중요한가? (실무 관점)
-
-**시나리오 1: 성능 최적화**
-```
-Before:
-- "서비스가 느려요"
-- 어디가 느린지 모름
-- 전체 코드 리뷰 (시간 낭비)
-
-After:
-- X-Ray Service Map 확인
-- approval-request-service의 MongoDB 쿼리가 200ms
-- 인덱스 추가 → 200ms → 50ms 개선 
-```
-
-**시나리오 2: 에러 추적**
-```
-Before:
-- "결재 요청이 안 돼요"
-- 어느 서비스에서 에러 났는지 모름
-- 모든 서비스 로그 확인 (시간 낭비)
-
-After:
-- X-Ray Traces 확인
-- employee-service (Lambda)에서 500 에러
-- Lambda 로그 확인 → RDS 연결 실패
-- RDS Security Group 수정 → 해결 
-```
-
-**시나리오 3: 서비스 의존성 파악**
-```
-X-Ray Service Map:
-- approval-request → employee (Lambda)
-- approval-request → notification
-- approval-processing → Kafka
-
-→ employee-service를 수정하면 approval-request에 영향
-→ 배포 전 테스트 필수
+# 4. Lambda 트레이스 확인
+aws logs tail /aws/lambda/erp-dev-employee-service --since 5m --region ap-northeast-2 | grep XRAY
+# XRAY TraceId: 1-6952584e-7b19e7a122a262d54b7e5296
 ```
 
 ---
 
-## Step 4: 단일 buildspec.yml 생성 (60분)
+## Step 4: CloudWatch Alarm 추가 (30분)
 
-### 4-1. 변경 감지 로직 (Git diff)
-
-**왜 필요한가?**
-- 현재: 모든 서비스 항상 빌드 (시간 낭비)
-- 개선: 변경된 서비스만 빌드 (시간 단축)
-
-### 4-2. 최종 buildspec.yml
-
-```yaml
-version: 0.2
-
-env:
-  # Parameter Store 통합
-  parameter-store:
-    AWS_ACCOUNT_ID: /erp/dev/account-id
-    AWS_REGION: /erp/dev/region
-    EKS_CLUSTER_NAME: /erp/dev/eks/cluster-name
-    ECR_REPOSITORY_PREFIX: /erp/dev/ecr/repository-prefix
-    PROJECT_NAME: /erp/dev/project-name
-    ENVIRONMENT: /erp/dev/environment
-
-phases:
-  install:
-    commands:
-      # Helm 설치
-      - curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      - helm version
-      
-      # yq 설치
-      - wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-      - chmod +x /usr/local/bin/yq
-      
-      # kubectl 확인
-      - kubectl version --client
-  
-  pre_build:
-    commands:
-      # ECR 로그인
-      - echo "Logging in to Amazon ECR..."
-      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-      
-      # EKS kubeconfig
-      - echo "Updating kubeconfig..."
-      - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
-      
-      # 변경 감지 (Git diff)
-      - echo "Detecting changed services..."
-      - |
-        if [ -z "$CODEBUILD_WEBHOOK_PREV_COMMIT" ]; then
-          echo "First build, building all services"
-          CHANGED_SERVICES="approval-request-service approval-processing-service notification-service"
-          LAMBDA_CHANGED="false"
-        else
-          CHANGED_FILES=$(git diff --name-only $CODEBUILD_WEBHOOK_PREV_COMMIT $CODEBUILD_RESOLVED_SOURCE_VERSION)
-          echo "Changed files: $CHANGED_FILES"
-          
-          CHANGED_SERVICES=""
-          LAMBDA_CHANGED="false"
-          
-          if echo "$CHANGED_FILES" | grep -q "backend/employee-service/"; then
-            LAMBDA_CHANGED="true"
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "backend/approval-request-service/"; then
-            CHANGED_SERVICES="$CHANGED_SERVICES approval-request-service"
-          fi
-          if echo "$CHANGED_FILES" | grep -q "backend/approval-processing-service/"; then
-            CHANGED_SERVICES="$CHANGED_SERVICES approval-processing-service"
-          fi
-          if echo "$CHANGED_FILES" | grep -q "backend/notification-service/"; then
-            CHANGED_SERVICES="$CHANGED_SERVICES notification-service"
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "helm-chart/"; then
-            echo "Helm Chart changed, deploying all EKS services"
-            CHANGED_SERVICES="approval-request-service approval-processing-service notification-service"
-          fi
-        fi
-      - echo "Services to build: $CHANGED_SERVICES"
-      - echo "Lambda changed: $LAMBDA_CHANGED"
-      - export CHANGED_SERVICES
-      - export LAMBDA_CHANGED
-      
-      # 이미지 태그
-      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
-      - echo "Image tag: $IMAGE_TAG"
-  
-  build:
-    commands:
-      - echo "Build started on $(date)"
-      
-      # Lambda (Employee Service)
-      - |
-        if [ "$LAMBDA_CHANGED" = "true" ]; then
-          echo "Building Lambda (Employee Service)..."
-          cd backend/employee-service
-          
-          mvn clean package -DskipTests
-          
-          docker build -f Dockerfile.lambda -t employee-service-lambda:latest .
-          docker tag employee-service-lambda:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:$IMAGE_TAG
-          docker tag employee-service-lambda:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:latest
-          
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:$IMAGE_TAG
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:latest
-          
-          aws lambda update-function-code \
-            --function-name $PROJECT_NAME-$ENVIRONMENT-employee-service \
-            --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:$IMAGE_TAG \
-            --region $AWS_REGION
-          
-          cd ../..
-        fi
-      
-      # EKS 서비스
-      - |
-        for SERVICE in $CHANGED_SERVICES; do
-          echo "Building $SERVICE..."
-          cd backend/$SERVICE
-          
-          mvn clean package -DskipTests
-          
-          REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/$SERVICE
-          docker build -t $REPOSITORY_URI:latest .
-          docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
-          
-          docker push $REPOSITORY_URI:latest
-          docker push $REPOSITORY_URI:$IMAGE_TAG
-          
-          # ECR 이미지 스캔
-          aws ecr start-image-scan \
-            --repository-name $ECR_REPOSITORY_PREFIX/$SERVICE \
-            --image-id imageTag=$IMAGE_TAG \
-            --region $AWS_REGION || true
-          
-          cd ../..
-        done
-  
-  post_build:
-    commands:
-      # ECR 스캔 결과 확인
-      - echo "Checking ECR scan results..."
-      - |
-        for SERVICE in $CHANGED_SERVICES; do
-          echo "Waiting for scan results for $SERVICE..."
-          SCAN_STATUS="IN_PROGRESS"
-          RETRY_COUNT=0
-          MAX_RETRIES=30
-          
-          while [ "$SCAN_STATUS" = "IN_PROGRESS" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            sleep 10
-            SCAN_STATUS=$(aws ecr describe-image-scan-findings \
-              --repository-name $ECR_REPOSITORY_PREFIX/$SERVICE \
-              --image-id imageTag=$IMAGE_TAG \
-              --region $AWS_REGION \
-              --query 'imageScanStatus.status' \
-              --output text 2>/dev/null || echo "IN_PROGRESS")
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-          done
-          
-          if [ "$SCAN_STATUS" = "COMPLETE" ]; then
-            CRITICAL=$(aws ecr describe-image-scan-findings \
-              --repository-name $ECR_REPOSITORY_PREFIX/$SERVICE \
-              --image-id imageTag=$IMAGE_TAG \
-              --region $AWS_REGION \
-              --query 'imageScanFindings.findingSeverityCounts.CRITICAL' \
-              --output text 2>/dev/null || echo "0")
-            
-            if [ "$CRITICAL" != "None" ] && [ "$CRITICAL" != "0" ]; then
-              echo " Critical vulnerabilities found in $SERVICE: $CRITICAL"
-              exit 1
-            else
-              echo " No critical vulnerabilities in $SERVICE"
-            fi
-          fi
-        done
-      
-      # Helm values 업데이트
-      - echo "Updating Helm values..."
-      - |
-        for SERVICE in $CHANGED_SERVICES; do
-          SERVICE_KEY=$(echo $SERVICE | sed 's/-service$//' | sed 's/-\([a-z]\)/\U\1/g' | sed 's/^./\L&/')
-          yq eval ".services.$SERVICE_KEY.image.tag = \"$IMAGE_TAG\"" -i helm-chart/values-dev.yaml
-          echo "Updated $SERVICE_KEY to $IMAGE_TAG"
-        done
-      
-      # Helm 배포
-      - echo "Deploying to EKS with Helm..."
-      - |
-        helm upgrade --install erp-microservices helm-chart/ \
-          -f helm-chart/values-dev.yaml \
-          -n erp-dev \
-          --create-namespace \
-          --wait \
-          --timeout 5m
-      
-      # 배포 확인
-      - kubectl get pods -n erp-dev
-      - kubectl get svc -n erp-dev
-      - helm history erp-microservices -n erp-dev
-      
-      - echo "Build completed on $(date)"
-
-artifacts:
-  files:
-    - helm-chart/**/*
-  name: helm-chart-$IMAGE_TAG
-
-cache:
-  paths:
-    - '/root/.m2/**/*'
-```
-
-### 4-3. 기존 buildspec.yml 삭제
-
-```bash
-cd /mnt/c/Users/Lethe/Desktop/취업준비/erp-project
-
-# 백업
-mkdir -p backup-buildspec
-cp backend/approval-request-service/buildspec.yml backup-buildspec/ 2>/dev/null || true
-cp backend/approval-processing-service/buildspec.yml backup-buildspec/ 2>/dev/null || true
-cp backend/notification-service/buildspec.yml backup-buildspec/ 2>/dev/null || true
-
-# 삭제
-rm -f backend/approval-request-service/buildspec.yml
-rm -f backend/approval-processing-service/buildspec.yml
-rm -f backend/notification-service/buildspec.yml
-```
-
-### 4-4. 루트에 buildspec.yml 생성
-
-```bash
-# 위의 buildspec.yml 내용을 루트에 생성
-cat > buildspec.yml << 'EOF'
-# (위의 전체 내용)
-EOF
-```
-
-### 4-5. Git 커밋
-
-```bash
-git add buildspec.yml
-git add helm-chart/
-git rm backend/*/buildspec.yml 2>/dev/null || true
-git commit -m "feat: Unified buildspec with 7 CodePipeline features"
-git push origin main
-```
-
----
-
-##  완료 체크리스트
-
-### Step 1: Parameter Store
-- [ ] Terraform으로 6개 Parameter 생성
-- [ ] terraform output 확인
-- [ ] CodeBuild Role SSM 권한 확인
-
-### Step 2: CloudWatch Logs
-- [ ] CodeBuild CloudWatch Logs 확인 (07단계에서 설정)
-- [ ] Fluent Bit DaemonSet 배포
-- [ ] CloudWatch Logs 그룹 확인
-
-
-### Step 3: X-Ray 트레이싱
-- [ ] Spring Boot X-Ray SDK 추가 (pom.xml)
-- [ ] XRayConfig.java 생성
-- [ ] X-Ray DaemonSet 배포
-- [ ] Helm Chart X-Ray 환경 변수 추가
-- [ ] X-Ray 콘솔에서 Service Map 확인
-
-### Step 4: 단일 buildspec.yml
-- [ ] 루트에 buildspec.yml 생성
-- [ ] 변경 감지 로직 동작 확인
-- [ ] 기존 buildspec.yml 3개 삭제
-- [ ] Git 커밋 완료
-
----
-
-## Step 5: CloudWatch Alarm 추가 (실무 필수) ⭐⭐⭐⭐⭐
-
-### 5-1. 왜 필요한가?
-
-**현재 상황:**
-- CloudWatch Logs로 로그 수집 ✅
-- X-Ray로 트레이싱 ✅
-- **하지만 알림이 없음** ❌
+### 4-1. 왜 필요한가?
 
 **문제:**
 ```
-ERROR 로그 발생
-  ↓
-아무도 모름
-  ↓
-장애 지속
+ERROR 로그 발생 → 아무도 모름 → 장애 지속
 ```
 
-**CloudWatch Alarm 추가 시:**
+**해결:**
 ```
-ERROR 로그 발생
-  ↓
-CloudWatch Alarm 감지
-  ↓
-SNS → Email 알림
-  ↓
-즉시 대응
+ERROR 로그 발생 → CloudWatch Alarm → SNS → 이메일 알림
 ```
 
----
-
-### 5-2. Terraform으로 CloudWatch Alarm 생성
-
-#### 5-2-1. SNS Topic 생성
+### 4-2. Terraform으로 생성
 
 ```bash
 cd infrastructure/terraform/dev/erp-dev-CloudWatch
-```
-
-**sns.tf 생성:**
-```hcl
-# SNS Topic for Alarms
-resource "aws_sns_topic" "erp_alarms" {
-  name = "${var.project_name}-${var.environment}-alarms"
-  
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-alarms"
-    Environment = var.environment
-    Project     = var.project_name
-  }
-}
-
-# SNS Subscription (Email)
-resource "aws_sns_topic_subscription" "erp_alarms_email" {
-  topic_arn = aws_sns_topic.erp_alarms.arn
-  protocol  = "email"
-  endpoint  = var.alarm_email  # 이메일 주소
-}
-
-output "sns_topic_arn" {
-  value = aws_sns_topic.erp_alarms.arn
-}
-```
-
-**variables.tf 수정:**
-```hcl
-variable "alarm_email" {
-  description = "Email address for alarm notifications"
-  type        = string
-  default     = "your-email@example.com"  # 본인 이메일로 변경
-}
-```
-
----
-
-#### 5-2-2. CloudWatch Metric Filter 생성
-
-**log-metric-filters.tf 생성:**
-```hcl
-# ERROR 로그 카운트 메트릭
-resource "aws_cloudwatch_log_metric_filter" "error_logs" {
-  name           = "${var.project_name}-${var.environment}-error-count"
-  log_group_name = data.terraform_remote_state.eks.outputs.cloudwatch_log_group_name
-  
-  # ERROR 레벨 로그 패턴
-  pattern = "[time, request_id, level = ERROR*, ...]"
-  
-  metric_transformation {
-    name      = "ErrorCount"
-    namespace = "ERP/Application"
-    value     = "1"
-    default_value = 0
-  }
-}
-
-# Pod 재시작 메트릭
-resource "aws_cloudwatch_log_metric_filter" "pod_restarts" {
-  name           = "${var.project_name}-${var.environment}-pod-restarts"
-  log_group_name = data.terraform_remote_state.eks.outputs.cloudwatch_log_group_name
-  
-  # Pod 재시작 패턴
-  pattern = "[time, stream, log_type = *restart* || log_type = *killed* || log_type = *crash*]"
-  
-  metric_transformation {
-    name      = "PodRestartCount"
-    namespace = "ERP/Application"
-    value     = "1"
-    default_value = 0
-  }
-}
-```
-
----
-
-#### 5-2-3. CloudWatch Alarm 생성
-
-**alarms.tf 생성:**
-```hcl
-# ERROR 로그 알람 (5분 동안 10회 이상)
-resource "aws_cloudwatch_metric_alarm" "high_error_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-high-error-rate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "ErrorCount"
-  namespace           = "ERP/Application"
-  period              = "300"  # 5분
-  statistic           = "Sum"
-  threshold           = "10"
-  alarm_description   = "ERROR 로그가 5분 동안 10회 이상 발생"
-  treat_missing_data  = "notBreaching"
-  
-  alarm_actions = [aws_sns_topic.erp_alarms.arn]
-  ok_actions    = [aws_sns_topic.erp_alarms.arn]
-  
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-high-error-rate"
-    Environment = var.environment
-    Severity    = "High"
-  }
-}
-
-# Pod 재시작 알람 (10분 동안 3회 이상)
-resource "aws_cloudwatch_metric_alarm" "pod_restart_alarm" {
-  alarm_name          = "${var.project_name}-${var.environment}-pod-restarts"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "PodRestartCount"
-  namespace           = "ERP/Application"
-  period              = "600"  # 10분
-  statistic           = "Sum"
-  threshold           = "3"
-  alarm_description   = "Pod가 10분 동안 3회 이상 재시작"
-  treat_missing_data  = "notBreaching"
-  
-  alarm_actions = [aws_sns_topic.erp_alarms.arn]
-  ok_actions    = [aws_sns_topic.erp_alarms.arn]
-  
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-pod-restarts"
-    Environment = var.environment
-    Severity    = "Critical"
-  }
-}
-
-# Lambda 에러율 알람 (5분 동안 에러율 5% 이상)
-resource "aws_cloudwatch_metric_alarm" "lambda_error_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-lambda-error-rate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  threshold           = "5"
-  alarm_description   = "Lambda 에러율이 5% 이상"
-  treat_missing_data  = "notBreaching"
-  
-  metric_query {
-    id          = "error_rate"
-    expression  = "(errors / invocations) * 100"
-    label       = "Error Rate"
-    return_data = true
-  }
-  
-  metric_query {
-    id = "errors"
-    metric {
-      metric_name = "Errors"
-      namespace   = "AWS/Lambda"
-      period      = "300"
-      stat        = "Sum"
-      dimensions = {
-        FunctionName = "${var.project_name}-${var.environment}-employee-service"
-      }
-    }
-  }
-  
-  metric_query {
-    id = "invocations"
-    metric {
-      metric_name = "Invocations"
-      namespace   = "AWS/Lambda"
-      period      = "300"
-      stat        = "Sum"
-      dimensions = {
-        FunctionName = "${var.project_name}-${var.environment}-employee-service"
-      }
-    }
-  }
-  
-  alarm_actions = [aws_sns_topic.erp_alarms.arn]
-  ok_actions    = [aws_sns_topic.erp_alarms.arn]
-  
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-lambda-error-rate"
-    Environment = var.environment
-    Severity    = "High"
-  }
-}
-```
-
----
-
-#### 5-2-4. Remote State 설정
-
-**data.tf 생성:**
-```hcl
-data "terraform_remote_state" "eks" {
-  backend = "s3"
-  config = {
-    bucket = "erp-terraform-state-806332783810"
-    key    = "dev/erp-dev-EKS/terraform.tfstate"
-    region = "ap-northeast-2"
-  }
-}
-```
-
----
-
-### 5-3. Terraform 실행
-
-```bash
-cd infrastructure/terraform/dev/erp-dev-CloudWatch
-
-# 초기화
 terraform init
-
-# 계획 확인
-terraform plan
-
-# 적용
 terraform apply -auto-approve
 ```
 
-**출력 예시:**
+**생성된 리소스:**
+- SNS Topic: `erp-dev-alarms`
+- Email Subscription: `subinhong0109@dankook.ac.kr`
+- Metric Filter: ERROR 로그 카운트
+- Metric Filter: Pod 재시작 감지
+- Alarm: ERROR 10회 이상 (5분)
+- Alarm: Pod 재시작 3회 이상 (10분)
+- Alarm: Lambda 에러율 5% 이상
+
+### 4-3. 이메일 구독 확인
+
 ```
-Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+1. AWS에서 이메일 발송
+2. "AWS Notification - Subscription Confirmation" 이메일 열기
+3. "Confirm subscription" 클릭
+```
 
-Outputs:
+### 4-4. 테스트
 
-sns_topic_arn = "arn:aws:sns:ap-northeast-2:806332783810:erp-dev-alarms"
+```bash
+# Pod 재시작 유발
+kubectl delete pods -n erp-dev -l app=approval-request-service
+
+# 2분 후 이메일 확인
+# Subject: ALARM: "erp-dev-pod-restarts" in Asia Pacific (Seoul)
+# Threshold Crossed: 3 restarts detected
 ```
 
 ---
 
-### 5-4. SNS 구독 확인
+## 🎯 실제 동작 시나리오
 
-**이메일 확인:**
-1. AWS에서 구독 확인 이메일 발송
-2. 이메일 열기
-3. "Confirm subscription" 클릭
+### 시나리오 1: 정상 요청 (GET /api/approvals)
+
+```bash
+curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals
+```
+
+**1. X-Ray 추적 (approval-request-service)**
+```
+① 요청 들어옴
+② AWSXRayServletFilter가 Segment 생성
+③ 서비스 처리 (MongoDB 쿼리)
+④ Segment 종료 (응답 시간 기록)
+⑤ X-Ray Daemon으로 전송 (UDP 2000)
+⑥ X-Ray Daemon → AWS X-Ray 서비스
+```
 
 **확인:**
 ```bash
-aws sns list-subscriptions-by-topic \
-  --topic-arn arn:aws:sns:ap-northeast-2:806332783810:erp-dev-alarms \
-  --region ap-northeast-2
+kubectl logs -n erp-dev -l app=xray-daemon --tail=5
+# [Info] Successfully sent batch of 1 segments (0.022 seconds)
+```
+
+**AWS Console:**
+```
+X-Ray → Traces
+→ Trace ID: 1-6952584e-xxx
+→ Duration: 1.2초
+→ Status: 200 OK
+```
+
+**2. CloudWatch Logs 수집**
+```
+① Pod가 stdout으로 로그 출력
+   2025-12-29T10:00:00 INFO Received request: GET /api/approvals
+② Kubernetes가 /var/log/containers/*.log에 저장
+③ Fluent Bit이 로그 읽음
+④ CloudWatch Logs로 전송
+⑤ /aws/eks/erp-dev/application에 저장
+```
+
+**확인:**
+```bash
+aws logs tail /aws/eks/erp-dev/application --since 1m --region ap-northeast-2
+# 2025-12-29T10:00:00 INFO Received request: GET /api/approvals
+```
+
+**3. CloudWatch Alarm (정상)**
+```
+① Metric Filter가 로그 스캔
+② ERROR 패턴 없음
+③ Alarm 상태: OK
 ```
 
 ---
 
-### 5-5. 알람 테스트
-
-#### 테스트 1: ERROR 로그 생성
+### 시나리오 2: 에러 발생 (500 Internal Server Error)
 
 ```bash
-# Pod에 접속
-kubectl exec -it deployment/approval-request-service -n erp-dev -- /bin/sh
-
-# 에러 로그 생성 (Java 애플리케이션 내부에서)
-# 또는 간단히 테스트용 에러 로그 출력
-for i in {1..15}; do
-  echo "$(date) ERROR Test error message $i"
-  sleep 1
-done
+# MongoDB 연결 실패 시나리오
 ```
 
-**5분 후 이메일 확인:**
+**1. CloudWatch Logs 수집**
+```
+① Pod가 ERROR 로그 출력
+   2025-12-29T10:05:00 ERROR MongoTimeoutException: Connection timeout
+② Fluent Bit이 로그 수집
+③ CloudWatch Logs에 저장
+```
+
+**2. CloudWatch Alarm 발동**
+```
+① Metric Filter가 "ERROR" 패턴 감지
+② ErrorCount 메트릭 증가 (1 → 2 → ... → 11)
+③ 5분 동안 10회 초과
+④ Alarm 상태: OK → ALARM
+⑤ SNS Topic으로 알림 발송
+⑥ 이메일 수신
+```
+
+**이메일 내용:**
 ```
 Subject: ALARM: "erp-dev-high-error-rate" in Asia Pacific (Seoul)
 
-You are receiving this email because your Amazon CloudWatch Alarm 
-"erp-dev-high-error-rate" in the Asia Pacific (Seoul) region has 
-entered the ALARM state.
-
 Alarm Details:
 - State Change: OK -> ALARM
-- Reason: Threshold Crossed: 1 datapoint [15.0] was greater than 
-  the threshold (10.0).
+- Reason: Threshold Crossed: 11 errors in 5 minutes
+- Timestamp: 2025-12-29 10:10:00 KST
+```
+
+**3. X-Ray 추적 (에러 포함)**
+```
+① 요청 들어옴
+② 서비스 처리 중 Exception 발생
+③ Segment에 에러 정보 기록
+   - HasError: true
+   - Exception: MongoTimeoutException
+④ X-Ray로 전송
+```
+
+**AWS Console:**
+```
+X-Ray → Traces → Filter: http.status = 500
+→ Trace ID: 1-xxx
+→ Duration: 0.5초
+→ Status: 500 Internal Server Error
+→ Exception: MongoTimeoutException
 ```
 
 ---
 
-#### 테스트 2: Pod 재시작
+### 시나리오 3: Lambda 호출 (GET /api/employees)
 
 ```bash
-# Pod 강제 삭제 (재시작 유발)
-kubectl delete pod -l app=approval-request-service -n erp-dev
-
-# 3번 반복
-kubectl delete pod -l app=approval-processing-service -n erp-dev
-kubectl delete pod -l app=notification-service -n erp-dev
+curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/employees
 ```
 
-**10분 후 이메일 확인:**
+**1. Lambda X-Ray 추적**
 ```
-Subject: ALARM: "erp-dev-pod-restarts" in Asia Pacific (Seoul)
-
-Alarm Details:
-- State Change: OK -> ALARM
-- Reason: Threshold Crossed: 1 datapoint [3.0] was greater than 
-  the threshold (3.0).
+① API Gateway → Lambda 호출
+② Lambda Runtime이 자동으로 Segment 생성
+③ Lambda 함수 실행
+   - RDS 쿼리: 20ms
+   - 응답 생성: 11ms
+④ Segment 종료 (총 31ms)
+⑤ AWS X-Ray로 직접 전송 (EKS Daemon 거치지 않음)
 ```
 
----
-
-### 5-6. CloudWatch Console 확인
-
-**Alarms 확인:**
+**확인:**
 ```bash
-# 브라우저에서
-https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#alarmsV2:
+# Lambda 로그에서 TraceId 확인
+aws logs tail /aws/lambda/erp-dev-employee-service --since 1m --region ap-northeast-2
+# XRAY TraceId: 1-6952584e-7b19e7a122a262d54b7e5296
 ```
 
-**확인 항목:**
-- erp-dev-high-error-rate: OK 상태
-- erp-dev-pod-restarts: OK 상태
-- erp-dev-lambda-error-rate: OK 상태
+**AWS Console:**
+```
+X-Ray → Traces
+→ Service: erp-dev-employee-service
+→ Type: AWS::Lambda
+→ Duration: 0.031초 (31ms)
+→ Memory Used: 348 MB / 2048 MB
+→ Cold Start: No
+```
+
+**2. Lambda CloudWatch Logs**
+```
+① Lambda가 자동으로 /aws/lambda/erp-dev-employee-service에 로그 전송
+② Fluent Bit 불필요 (Lambda 내장 기능)
+```
 
 ---
 
-### 5-7. 면접 어필 포인트
+### 시나리오 4: Kafka 메시지 처리 (approval-processing-service)
 
-**Q: 모니터링은 어떻게 하나요?**
+```
+approval-request → Kafka → approval-processing
+```
 
-**A:**
-"3단계로 모니터링합니다. 첫째, CloudWatch Logs로 모든 Pod 로그를 중앙 집중합니다. 둘째, CloudWatch Alarm으로 ERROR 로그가 5분 동안 10회 이상 발생하거나 Pod가 10분 동안 3회 이상 재시작하면 SNS로 이메일 알림을 받습니다. 셋째, X-Ray로 서비스 간 트레이싱을 추적하여 병목 지점을 파악합니다."
+**1. X-Ray 추적 (불가)**
+```
+❌ HTTP 요청 없음 (Kafka Consumer만)
+❌ X-Ray Servlet Filter 작동 안 함
+→ CloudWatch Logs로 대체
+```
 
-**Q: 장애 발생 시 어떻게 대응하나요?**
+**2. CloudWatch Logs 수집**
+```
+① approval-processing-service가 Kafka 메시지 수신
+   2025-12-29T10:00:00 INFO Received approval request: requestId=123
+② Fluent Bit이 로그 수집
+③ CloudWatch Logs에 저장
+```
 
-**A:**
-"CloudWatch Alarm이 이메일로 알림을 보내면, CloudWatch Logs Insights로 에러 로그를 검색하여 원인을 파악합니다. X-Ray Service Map에서 어느 서비스에서 지연이 발생했는지 확인하고, kubectl logs로 상세 로그를 확인합니다. 문제 해결 후 Alarm이 자동으로 OK 상태로 돌아갑니다."
-
----
-
-##  완료 체크리스트
-
-### CGV vs ERP 비교
-
-| 기능 | CGV (GitLab CI) | ERP (CodePipeline) | 차별화 포인트 |
-|------|----------------|-------------------|--------------|
-| Secret 관리 | GitLab Variables |  AWS Secrets Manager | RDS 자동 로테이션 |
-| 설정 관리 | .gitlab-ci.yml 하드코딩 |  Parameter Store | 중앙 관리, 환경별 분리 |
-| 로그 관리 | GitLab Logs |  CloudWatch Logs | 영구 보관, 통합 검색 |
-| **알림 관리** | **수동** | ** CloudWatch Alarm + SNS** | **실시간 이메일 알림** |
-| 이미지 스캔 | 수동 |  ECR 자동 스캔 | Critical 발견 시 배포 중단 |
-| 트레이싱 | 없음 |  X-Ray | Service Map, 병목 분석 |
-| 변경 감지 | 전체 빌드 |  Git diff | 변경된 서비스만 빌드 |
-| 배포 방식 | kubectl set image |  helm upgrade | Manifests 자동 반영 |
-
-**결론: CodePipeline의 AWS 네이티브 통합을 최대한 활용하여 CGV 수준 초과 달성!**
+**확인:**
+```bash
+aws logs tail /aws/eks/erp-dev/application --since 1m --region ap-northeast-2 | grep "approval-processing"
+# 2025-12-29T10:00:00 INFO Received approval request: requestId=123
+```
 
 ---
 
-##  다음 단계
+## 📊 모니터링 구조 요약
+
+### ✅ **HTTP 기반 서비스**
+
+| 서비스 | X-Ray | CloudWatch Logs | CloudWatch Alarm |
+|--------|-------|-----------------|------------------|
+| approval-request-service | ✅ | ✅ | ✅ |
+| employee-service (Lambda) | ✅ | ✅ | ✅ |
+
+**동작:**
+- HTTP 요청 → X-Ray Servlet Filter → 트레이스 생성
+- 로그 출력 → Fluent Bit → CloudWatch Logs
+- ERROR 로그 → Metric Filter → Alarm → 이메일
+
+### ⚠️ **Kafka 기반 서비스**
+
+| 서비스 | X-Ray | CloudWatch Logs | CloudWatch Alarm |
+|--------|-------|-----------------|------------------|
+| approval-processing-service | ❌ | ✅ | ✅ |
+| notification-service | ❌ | ✅ | ✅ |
+
+**동작:**
+- Kafka 메시지 → X-Ray 추적 불가
+- 로그 출력 → Fluent Bit → CloudWatch Logs
+- ERROR 로그 → Metric Filter → Alarm → 이메일
+
+---
+
+## 🎓 면접 어필 포인트
+
+### Q: 모니터링은 어떻게 구축했나요?
+
+**A:** "3단계로 구축했습니다. 첫째, CloudWatch Logs로 모든 Pod 로그를 Fluent Bit DaemonSet을 통해 중앙 집중했습니다. 둘째, X-Ray로 HTTP 기반 서비스의 분산 트레이싱을 구현했습니다. approval-request-service는 X-Ray Servlet Filter로, employee-service Lambda는 Lambda 내장 X-Ray로 추적합니다. 셋째, CloudWatch Alarm으로 ERROR 로그 10회 이상 또는 Pod 재시작 3회 이상 시 SNS 이메일 알림을 받습니다."
+
+### Q: Kafka 서비스는 왜 X-Ray 추적이 안 되나요?
+
+**A:** "X-Ray Servlet Filter는 HTTP 요청만 자동 추적합니다. approval-processing-service는 Kafka Consumer만 있어서 HTTP 요청이 없습니다. 이런 경우 CloudWatch Logs로 모니터링하며, 필요 시 Kafka 메시지에 Trace ID를 수동으로 전파하는 방식을 고려할 수 있습니다. 실무에서는 HTTP 기반은 X-Ray, 메시징 기반은 CloudWatch Logs를 함께 사용하는 하이브리드 전략이 일반적입니다."
+
+### Q: CloudWatch Logs와 X-Ray의 차이는?
+
+**A:** "CloudWatch Logs는 '무엇이' 잘못되었는지 파악하는 도구이고, X-Ray는 '어디가' 느린지 파악하는 도구입니다. CloudWatch Logs로 ERROR 로그를 검색하여 문제를 찾고, X-Ray Service Map으로 병목 지점을 찾아 성능을 최적화합니다. 예를 들어 CloudWatch Logs에서 'MongoTimeoutException'을 발견하고, X-Ray에서 MongoDB 쿼리가 0.8초 걸리는 것을 확인하여 인덱스를 추가했습니다."
+
+---
+
+## ✅ 완료 체크리스트
+
+### Terraform
+- [x] Parameter Store 6개 생성
+- [x] CloudWatch Alarm 3개 생성 (SNS + Metric Filter)
+- [x] EKS Node Role에 CloudWatch Logs 권한 추가
+- [x] Lambda Role에 X-Ray 권한 추가
+
+### Helm Chart
+- [x] Fluent Bit DaemonSet 배포
+- [x] X-Ray DaemonSet 배포
+- [x] 모든 서비스에 AWS_XRAY_DAEMON_ADDRESS 환경변수 설정
+
+### 코드
+- [x] 3개 서비스에 XRayConfig.java 추가 (로깅 포함)
+- [x] pom.xml에 aws-xray-recorder-sdk-spring 추가
+
+### Lambda
+- [x] Lambda X-Ray Active 모드 활성화
+- [x] Lambda Role에 AWSXRayDaemonWriteAccess 정책 추가
+
+### 검증
+- [x] Fluent Bit Pod Running 확인
+- [x] X-Ray Daemon Pod Running 확인
+- [x] CloudWatch Logs에 로그 수집 확인
+- [x] X-Ray Traces 수집 확인 (EKS + Lambda)
+- [x] CloudWatch Alarm 이메일 수신 확인
+
+---
+
+## 🚀 다음 단계
 
 **06단계 완료!**
 
@@ -1530,299 +637,4 @@ cat 07_CODEPIPELINE.md
 
 ---
 
-**"7가지 CodePipeline 강점을 모두 구현했습니다. 이제 CGV와 대등한 수준입니다!"**
-
-
----
-
-## 🔍 X-Ray 트러블슈팅 전체 과정 (실제 구현 기록)
-
-### ❌ **초기 문제: X-Ray 트레이스가 전송되지 않음**
-
-**증상:**
-```bash
-# X-Ray Daemon 로그 확인
-kubectl logs -n erp-dev xray-daemon-xxxxx
-
-# 출력:
-# [Info] Starting proxy http server on 0.0.0.0:2000
-# → 이후 아무 로그 없음 (트레이스 미수신)
-```
-
-**원인 분석:**
-1. ✅ X-Ray DaemonSet 정상 실행 (2개 Pod Running)
-2. ✅ 환경변수 설정됨 (`AWS_XRAY_DAEMON_ADDRESS`)
-3. ✅ pom.xml에 X-Ray SDK 존재
-4. ✅ XRayConfig.java 존재
-5. ❌ **Spring Boot 로그에 X-Ray 초기화 메시지 없음**
-
-### 🔧 **해결 과정**
-
-#### Step 1: XRayConfig에 로깅 추가
-
-**문제:** X-Ray가 초기화되는지 확인 불가
-
-**해결:**
-```java
-// XRayConfig.java
-@Configuration
-public class XRayConfig {
-    
-    private static final Logger logger = LoggerFactory.getLogger(XRayConfig.class);
-    
-    @PostConstruct
-    public void init() {
-        logger.info("=== X-Ray Configuration Initializing ===");
-        logger.info("X-Ray Daemon Address: {}", System.getenv("AWS_XRAY_DAEMON_ADDRESS"));
-        
-        AWSXRayRecorderBuilder builder = AWSXRayRecorderBuilder.standard();
-        AWSXRay.setGlobalRecorder(builder.build());
-        
-        logger.info("=== X-Ray Recorder Initialized Successfully ===");
-    }
-    
-    @Bean
-    public Filter TracingFilter() {
-        logger.info("=== X-Ray Servlet Filter Created ===");
-        return new AWSXRayServletFilter("approval-request-service");
-    }
-}
-```
-
-**결과:**
-```bash
-kubectl logs -n erp-dev approval-request-service-xxx --tail=100 | grep "=== X-Ray"
-
-# 출력:
-# === X-Ray Configuration Initializing ===
-# === X-Ray Recorder Initialized Successfully ===
-# === X-Ray Servlet Filter Created ===
-# ✅ X-Ray 초기화 확인!
-```
-
-#### Step 2: 실제 요청으로 트레이스 생성 테스트
-
-**문제:** employee-service (Lambda)로 요청 시 트레이스 미생성
-
-**원인:** Lambda는 별도 X-Ray 설정 필요, EKS 서비스만 테스트해야 함
-
-**해결:**
-```bash
-# approval-request-service에 직접 요청
-curl https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals
-
-# X-Ray Daemon 로그 확인
-kubectl logs -n erp-dev xray-daemon-xxxxx --since=30s
-
-# 출력:
-# [Info] Successfully sent batch of 1 segments (0.453 seconds)
-# ✅ 트레이스 전송 성공!
-```
-
-#### Step 3: 모든 서비스에 적용
-
-**작업 내용:**
-1. approval-processing-service/XRayConfig.java 업데이트
-2. notification-service/XRayConfig.java 업데이트
-3. 이미지 재빌드 & ECR 푸시
-4. Pod 재시작
-
-**결과:**
-```bash
-# 30개 요청 전송
-for i in {1..30}; do 
-  curl -s https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/approvals > /dev/null
-  sleep 2
-done
-
-# X-Ray Daemon 로그
-kubectl logs -n erp-dev xray-daemon-xxxxx --since=2m
-
-# 출력:
-# [Info] Successfully sent batch of 1 segments (0.042 seconds)
-# [Info] Successfully sent batch of 1 segments (0.016 seconds)
-# [Info] Successfully sent batch of 1 segments (0.020 seconds)
-# ... (계속 전송 중)
-# ✅ 모든 서비스 트레이스 전송 성공!
-```
-
----
-
-### 📊 **X-Ray vs CloudWatch Logs 차이점**
-
-| 항목 | CloudWatch Logs | X-Ray |
-|------|----------------|-------|
-| **목적** | 로그 저장 및 검색 | 분산 트레이싱 |
-| **수집 대상** | 텍스트 로그 (stdout/stderr) | HTTP 요청 흐름 |
-| **사용 시점** | 에러 로그 분석, 디버깅 | 성능 병목 분석, 서비스 의존성 파악 |
-| **시각화** | 텍스트 검색, 그래프 | Service Map (노드 + 엣지) |
-| **예시** | "ERROR: Connection failed" | "approval-request → employee (200ms)" |
-| **언제 사용?** | 무엇이 잘못되었는지 (What) | 어디가 느린지 (Where) |
-
-**실제 사용 예시:**
-
-**CloudWatch Logs:**
-```bash
-# 에러 로그 검색
-aws logs tail /aws/eks/erp-dev/application --since 1h | grep ERROR
-
-# 출력:
-# 2025-12-29 04:00:00 ERROR Connection to MongoDB failed
-# 2025-12-29 04:05:00 ERROR Kafka producer timeout
-# → 무엇이 잘못되었는지 파악
-```
-
-**X-Ray:**
-```
-AWS Console → X-Ray → Service Map
-
-클라이언트 → approval-request (1.2초) → MongoDB (0.8초)
-                    ↓
-              notification (0.3초) → Redis (0.1초)
-
-→ MongoDB 쿼리가 느림 (0.8초)
-→ 인덱스 추가 필요
-→ 어디가 느린지 파악
-```
-
----
-
-### ✅ **X-Ray 동작 조건 (중요!)**
-
-X-Ray가 트레이스를 생성하려면:
-
-1. ✅ **Spring Boot에 X-Ray SDK 추가** (pom.xml)
-2. ✅ **XRayConfig.java 생성** (Filter 등록)
-3. ✅ **X-Ray DaemonSet 배포** (Helm Chart)
-4. ✅ **환경변수 설정** (AWS_XRAY_DAEMON_ADDRESS)
-5. ✅ **IAM 권한** (EKS Node Role에 XRay 권한)
-6. ✅ **실제 HTTP 요청** (트레이스는 요청이 있어야 생성됨)
-
-**주의:** X-Ray는 **HTTP 요청이 들어와야** 트레이스를 생성합니다!
-- Pod만 실행 중 → 트레이스 없음
-- API 요청 → 트레이스 생성 → X-Ray Daemon → AWS X-Ray
-
----
-
-### 🎯 **Helm Chart vs CLI 작업 확인**
-
-**질문:** "헬름차트나 테라폼 코드에 추가하지않고 CLI로 작업한거 뭐 없지?"
-
-**답변:** ✅ **모든 작업이 Helm Chart 또는 Terraform에 포함되어 있습니다!**
-
-#### Helm Chart에 포함된 것:
-
-1. **xray-daemonset.yaml** (templates/)
-   ```yaml
-   apiVersion: apps/v1
-   kind: DaemonSet
-   metadata:
-     name: xray-daemon
-   ```
-   - ✅ Helm Chart에 포함
-   - ✅ `helm upgrade` 명령으로 배포
-
-2. **values-dev.yaml** (X-Ray 설정)
-   ```yaml
-   xray:
-     enabled: true
-     image:
-       repository: amazon/aws-xray-daemon
-       tag: latest
-   ```
-   - ✅ Helm Chart에 포함
-
-3. **서비스 환경변수** (values-dev.yaml)
-   ```yaml
-   services:
-     approvalRequest:
-       env:
-         - name: AWS_XRAY_DAEMON_ADDRESS
-           value: "xray-daemon.erp-dev.svc.cluster.local:2000"
-   ```
-   - ✅ Helm Chart에 포함
-
-#### Terraform에 포함된 것:
-
-1. **IAM 권한** (erp-dev-IAM/eks-node-role/)
-   ```hcl
-   resource "aws_iam_role_policy_attachment" "eks_node_xray" {
-     role       = aws_iam_role.eks_node.name
-     policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
-   }
-   ```
-   - ✅ Terraform에 포함
-
-#### CLI로만 한 작업 (임시):
-
-1. **Pod 삭제 및 재시작**
-   ```bash
-   kubectl delete pods -n erp-dev -l app=approval-request-service
-   ```
-   - ⚠️ 임시 작업 (이미지 업데이트 후 재시작용)
-   - ✅ Helm Chart의 replicaCount가 자동으로 재생성
-
-2. **이미지 태그 변경 (테스트용)**
-   ```bash
-   kubectl set image deployment/approval-request-service ...
-   ```
-   - ⚠️ 임시 작업 (빠른 테스트용)
-   - ✅ 최종적으로 values-dev.yaml에 반영됨
-
-**결론:** ✅ **모든 X-Ray 설정이 Helm Chart에 포함되어 있으며, Git에 커밋되어 있습니다!**
-
----
-
-### 📝 **최종 확인 체크리스트**
-
-#### Helm Chart 확인:
-```bash
-# X-Ray DaemonSet 템플릿 존재
-ls helm-chart/templates/xray-daemonset.yaml
-# ✅ 존재
-
-# values-dev.yaml에 X-Ray 설정 존재
-grep -A5 "xray:" helm-chart/values-dev.yaml
-# ✅ enabled: true, image, resources 설정됨
-
-# 서비스 환경변수 확인
-grep "AWS_XRAY_DAEMON_ADDRESS" helm-chart/values-dev.yaml
-# ✅ 3개 서비스 모두 설정됨
-```
-
-#### 코드 확인:
-```bash
-# 모든 서비스에 XRayConfig.java 존재
-find backend -name "XRayConfig.java"
-# ✅ approval-request, approval-processing, notification 모두 존재
-
-# pom.xml에 X-Ray SDK 존재
-grep "aws-xray-recorder-sdk-spring" backend/*/pom.xml
-# ✅ 3개 서비스 모두 존재
-```
-
-#### Git 확인:
-```bash
-# 모든 변경사항 커밋됨
-git log --oneline -5
-# bc95b68 feat: Complete X-Ray tracing for all services
-# 9bdb6d8 feat: Add X-Ray tracing with logging for debugging
-# 73342b6 fix: Initialize X-Ray recorder properly for Spring Boot 3.x
-# ✅ 모든 X-Ray 작업 커밋됨
-```
-
----
-
-### 🎓 **면접 어필 포인트**
-
-**Q: X-Ray를 어떻게 구현했나요?**
-
-**A:** "4단계로 구현했습니다. 첫째, Spring Boot에 X-Ray SDK를 추가하고 XRayConfig로 Filter를 등록했습니다. 둘째, Helm Chart에 X-Ray DaemonSet을 추가하여 각 Node에서 트레이스를 수집하도록 했습니다. 셋째, EKS Node Role에 XRay 권한을 부여하여 AWS X-Ray로 데이터를 전송할 수 있게 했습니다. 넷째, 환경변수로 Daemon 주소를 설정하여 서비스가 트레이스를 전송하도록 했습니다. 결과적으로 Service Map에서 서비스 간 호출 흐름과 응답 시간을 시각화할 수 있게 되었습니다."
-
-**Q: CloudWatch Logs와 X-Ray의 차이는?**
-
-**A:** "CloudWatch Logs는 '무엇이' 잘못되었는지 파악하는 도구이고, X-Ray는 '어디가' 느린지 파악하는 도구입니다. CloudWatch Logs로 ERROR 로그를 검색하여 문제를 찾고, X-Ray Service Map으로 병목 지점을 찾아 성능을 최적화합니다. 두 도구를 함께 사용하여 완전한 모니터링 체계를 구축했습니다."
-
----
-
-**"X-Ray 완벽 구현 완료! 이제 마이크로서비스 흐름을 한눈에 볼 수 있습니다!"** 🎉
+**"CloudWatch Logs, X-Ray, CloudWatch Alarm 모두 구축 완료! 이제 완벽한 모니터링 체계를 갖췄습니다!"** 🎉

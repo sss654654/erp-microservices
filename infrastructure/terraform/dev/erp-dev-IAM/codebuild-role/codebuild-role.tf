@@ -171,6 +171,25 @@ resource "aws_iam_role_policy" "codebuild_ecr_scan" {
   })
 }
 
+# Lambda 업데이트 권한 (buildspec.yml에서 필요)
+resource "aws_iam_role_policy" "codebuild_lambda" {
+  role = aws_iam_role.codebuild.id
+  name = "codebuild-lambda-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "lambda:UpdateFunctionCode",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration"
+      ]
+      Resource = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-${var.environment}-*"
+    }]
+  })
+}
+
 variable "project_name" {}
 variable "environment" {}
 
