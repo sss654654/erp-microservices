@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# IMAGE_TAG 생성 및 저장
+export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+echo "$IMAGE_TAG" > /tmp/image_tag.txt
+echo "Image tag: $IMAGE_TAG"
+
 echo "=========================================="
 echo "Detecting changed services..."
 echo "=========================================="

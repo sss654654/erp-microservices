@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+IMAGE_TAG=$(cat /tmp/image_tag.txt)
 CHANGED_SERVICES=$(cat /tmp/changed_services.txt)
 LAMBDA_CHANGED=$(cat /tmp/lambda_changed.txt)
 

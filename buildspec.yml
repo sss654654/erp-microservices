@@ -26,8 +26,6 @@ phases:
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
       - echo "Updating kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
-      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
-      - echo "Image tag is $IMAGE_TAG"
       - echo "Detecting changed services..."
       - chmod +x ./scripts/detect-changes.sh
       - ./scripts/detect-changes.sh
