@@ -26,12 +26,12 @@ phases:
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
       - echo "Updating kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
-      - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
       - echo "Image tag is $IMAGE_TAG"
       - echo "Skipping change detection for first test - will build all services"
-      - export CHANGED_SERVICES="approval-request-service"
-      - export LAMBDA_CHANGED="false"
-      - export HELM_CHANGED="true"
+      - CHANGED_SERVICES="approval-request-service"
+      - LAMBDA_CHANGED="false"
+      - HELM_CHANGED="true"
   
   build:
     commands:
