@@ -1,6 +1,10 @@
 # 개발 환경 설정
 namespace: erp-dev
 
+# IAM Role ARNs
+eksNodeRoleArn: arn:aws:iam::806332783810:role/erp-dev-eks-node-role
+codebuildRoleArn: arn:aws:iam::806332783810:role/erp-dev-codebuild-role
+
 # AWS Secrets Manager 설정
 secretsManager:
   enabled: true
