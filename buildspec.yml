@@ -36,13 +36,13 @@ phases:
       - echo "Updating kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
       
-      # 이미지 태그 생성
-      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
-      - echo "Image tag: $IMAGE_TAG"
-      
-      # Git diff로 변경 감지
-      - echo "Detecting changed services..."
+      # 이미지 태그 생성 및 변경 감지
       - |
+        IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+        echo "Image tag: $IMAGE_TAG"
+        
+        # Git diff로 변경 감지
+        echo "Detecting changed services..."
         if [ -z "$CODEBUILD_WEBHOOK_PREV_COMMIT" ]; then
           echo "First build or manual trigger, building all services"
           CHANGED_SERVICES="approval-request-service approval-processing-service notification-service"
