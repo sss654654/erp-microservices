@@ -175,3 +175,42 @@ resource "aws_apigatewayv2_route" "employee_root" {
   route_key = "ANY /api/employees"
   target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
 }
+
+# Quest 라우트 추가
+resource "aws_apigatewayv2_route" "quests_proxy" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/quests/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "quests_root" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/quests"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
+
+# Attendance 라우트 추가
+resource "aws_apigatewayv2_route" "attendance_proxy" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/attendance/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "attendance_root" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/attendance"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
+
+# Leave 라우트 추가
+resource "aws_apigatewayv2_route" "leaves_proxy" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/leaves/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "leaves_root" {
+  api_id    = data.terraform_remote_state.api_gateway.outputs.api_id
+  route_key = "ANY /api/leaves"
+  target    = "integrations/${aws_apigatewayv2_integration.employee_lambda.id}"
+}
