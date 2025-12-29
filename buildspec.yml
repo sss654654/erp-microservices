@@ -299,13 +299,13 @@ phases:
         else
           echo "No Helm deployment needed"
         fi
-      
-      - echo "=========================================="
-      - echo "Build completed successfully on $(date)"
-      - echo "Image tag: $IMAGE_TAG"
-      - echo "Services deployed: $CHANGED_SERVICES"
-      - echo "Lambda updated: $LAMBDA_CHANGED"
-      - echo "=========================================="
+        
+        echo "=========================================="
+        echo "Build completed successfully on $(date)"
+        echo "Image tag: $IMAGE_TAG"
+        echo "Services deployed: $CHANGED_SERVICES"
+        echo "Lambda updated: $LAMBDA_CHANGED"
+        echo "=========================================="
 
 artifacts:
   files:
