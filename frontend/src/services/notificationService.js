@@ -6,27 +6,10 @@ let stompClient = null;
 
 export const notificationService = {
   connect: (onMessageReceived) => {
-    const socket = new SockJS(`${API_ENDPOINTS.NOTIFICATION}/ws/notifications`);
-    stompClient = new Client({
-      webSocketFactory: () => socket,
-      onConnect: () => {
-        console.log('WebSocket Connected');
-        stompClient.subscribe('/topic/notifications', (message) => {
-          const notification = JSON.parse(message.body);
-          onMessageReceived(notification);
-        });
-      },
-      onStompError: (frame) => {
-        console.error('STOMP error:', frame);
-      },
-    });
-    stompClient.activate();
+    console.log('WebSocket disabled - HTTPS/HTTP mixed content not allowed');
   },
 
   disconnect: () => {
-    if (stompClient) {
-      stompClient.deactivate();
-      console.log('WebSocket Disconnected');
-    }
+    console.log('WebSocket disabled');
   },
 };
