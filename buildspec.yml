@@ -28,34 +28,21 @@ phases:
       - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
       - echo "Image tag is $IMAGE_TAG"
-      - echo "Skipping change detection for first test - will build all services"
-      - CHANGED_SERVICES="approval-request-service"
-      - LAMBDA_CHANGED="false"
-      - HELM_CHANGED="true"
+      - echo "Detecting changed services..."
+      - chmod +x ./scripts/detect-changes.sh
+      - ./scripts/detect-changes.sh
   
   build:
     commands:
       - echo "Build phase started on $(date)"
-      - echo "Building approval-request-service..."
-      - cd backend/approval-request-service
-      - mvn clean package -DskipTests
-      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/approval-request-service
-      - docker build -t $REPOSITORY_URI:latest .
-      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
-      - docker push $REPOSITORY_URI:latest
-      - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - cd ../..
-      - echo "Build completed"
+      - chmod +x ./scripts/build-services.sh
+      - ./scripts/build-services.sh
   
   post_build:
     commands:
       - echo "Post-build phase started on $(date)"
-      - echo "Updating Helm values..."
-      - yq eval ".services.approvalRequest.image.tag = \"$IMAGE_TAG\"" -i helm-chart/values-dev.yaml
-      - echo "Deploying to EKS with Helm..."
-      - helm upgrade erp-microservices ./helm-chart --values ./helm-chart/values-dev.yaml --namespace erp-dev --install --wait --timeout 5m
-      - echo "Deployment completed"
-      - kubectl get pods -n erp-dev
+      - chmod +x ./scripts/deploy-services.sh
+      - ./scripts/deploy-services.sh
       - echo "Build completed successfully on $(date)"
 
 artifacts:
