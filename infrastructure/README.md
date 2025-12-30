@@ -69,22 +69,213 @@
 
 ### 설계 철학: 세분화 vs 통합 vs 단일
 
-**1. 세분화 (Granular)**: 하위 모듈을 독립적으로 apply
-- 장점: 변경 영향 최소화, State Lock 충돌 방지, 빠른 Plan/Apply
-- 단점: 초기 구축 시 여러 번 실행 필요
-- 적용: VPC, SecurityGroups, IAM, Databases, EKS, APIGateway, Frontend, Cognito, CICD
+#### tfstate 파일이란?
 
-**2. 통합 (Integrated)**: main.tf가 하위 모듈 호출, 한 번에 apply
-- 장점: 의존성 관리 자동, 원자성 보장, 간단한 실행
-- 단점: 한 모듈 변경 시 전체 Plan 필요
-- 적용: 모든 최상위 폴더 (main.tf 존재)
+Terraform은 실제 AWS 리소스 상태를 `terraform.tfstate` 파일에 저장합니다. 이 파일은:
+- **현재 인프라 상태 기록**: 어떤 리소스가 생성되었는지, ID는 무엇인지
+- **변경 감지**: 코드와 실제 상태를 비교하여 변경사항 파악
+- **의존성 관리**: 리소스 간 참조 관계 저장
 
-**3. 단일 (Single)**: 하위 모듈 없이 단일 tf 파일
-- 장점: 가장 간단한 구조
-- 단점: 파일이 커질 수 있음
-- 적용: ECR, LoadBalancerController, Lambda, ParameterStore, CloudWatch
+**문제점**: 여러 사람이 동시에 `terraform apply`를 실행하면 tfstate 파일이 충돌합니다.
 
-### 폴더 구조
+**해결책**: 
+1. **S3 Backend**: tfstate를 S3에 저장하여 공유
+2. **DynamoDB Lock**: 동시 실행 방지 (한 명만 apply 가능)
+3. **모듈별 tfstate 분리**: 각 모듈이 독립적인 tfstate 파일 보유
+
+---
+
+### 세분화 / 통합 / 단일 전략
+
+#### 1️⃣ 세분화 (Granular) - 하위 폴더별 독립 실행
+
+**구조:**
+```
+erp-dev-VPC/
+├── vpc/                    # terraform apply 1 (독립 tfstate)
+├── subnet/                 # terraform apply 2 (독립 tfstate)
+└── route-table/            # terraform apply 3 (독립 tfstate)
+```
+
+**특징:**
+- 각 하위 폴더가 독립적인 tfstate 파일 보유
+- 변경 시 해당 폴더만 apply (다른 리소스 영향 없음)
+- State Lock 충돌 최소화 (A가 vpc 수정 중에도 B는 subnet 수정 가능)
+
+**적용 대상:**
+- **VPC** (3개): vpc, subnet, route-table
+- **SecurityGroups** (4개): alb-sg, eks-sg, rds-sg, elasticache-sg
+- **Databases** (2개): rds, elasticache
+
+**선택 이유:**
+- 변경 빈도가 높음 (보안 그룹 규칙, RDS 파라미터 등)
+- 독립적으로 수정 가능 (VPC는 그대로 두고 보안 그룹만 변경)
+- 콘솔에서 급하게 수정 후 형상 맞추기 용이
+
+**실무 조언 (멘토):**
+> "보안그룹이나 RDS를 테라폼으로 관리하면 정책 1개만 달라져도 틀어져서 여러 부서가 함께하는 프로젝트에는 부적합. 폴더는 세분화하고 각 tfstate 파일을 따로 저장하는게, 콘솔 작업 후 형상 맞춰주기 좋음."
+
+**형상 관리 예시:**
+```bash
+# 급하게 콘솔에서 RDS 파라미터 변경
+# → Terraform 형상 맞추기
+cd erp-dev-Databases/rds
+terraform import aws_db_parameter_group.main erp-dev-mysql-params
+terraform plan  # RDS만 확인 (다른 리소스 영향 없음)
+terraform apply
+```
+
+---
+
+#### 2️⃣ 통합 (Integrated) - main.tf에서 module 호출
+
+**구조:**
+```
+erp-dev-IAM/
+├── main.tf                 # 4개 모듈 호출 (한 번에 apply)
+├── eks-cluster-role/
+├── eks-node-role/
+├── codebuild-role/
+└── codepipeline-role/
+```
+
+**main.tf 예시:**
+```hcl
+module "eks_cluster_role" {
+  source = "./eks-cluster-role"
+}
+
+module "eks_node_role" {
+  source = "./eks-node-role"
+}
+
+# 한 번에 terraform apply
+```
+
+**특징:**
+- main.tf가 하위 모듈을 호출하여 한 번에 apply
+- 하나의 tfstate 파일에 모든 하위 리소스 저장
+- 의존성 자동 관리 (eks-cluster-role → eks-node-role 순서)
+
+**적용 대상:**
+- **IAM** (4개 role): Trust Policy 일관성 필요
+- **EKS** (3개 모듈): cluster → node-group 의존성
+- **APIGateway** (2개 모듈): NLB + API Gateway 원자성
+- **Frontend** (2개 모듈): S3 + CloudFront 연동
+- **Cognito** (1개 모듈): user-pool
+- **CICD** (3개 모듈): s3-artifacts, codebuild, codepipeline
+
+**선택 이유:**
+- 강한 의존성 (IAM Trust Policy, EKS Cluster → Node Group)
+- 원자성 보장 (NLB + API Gateway는 함께 생성/삭제)
+- 초기 구축 시 한 번에 실행 편리
+
+---
+
+#### 3️⃣ 단일 (Single) - 폴더 바로 아래 tf 파일
+
+**구조:**
+```
+erp-dev-ECR/
+├── ecr.tf                  # 4개 Repository 정의
+├── outputs.tf
+└── variables.tf
+```
+
+**특징:**
+- 하위 모듈 없이 단일 tf 파일
+- 가장 간단한 구조
+
+**적용 대상:**
+- **ECR** (4개 Repository)
+- **Lambda** (employee-service)
+- **LoadBalancerController** (Helm)
+- **ParameterStore** (6개 Parameter)
+- **CloudWatch** (SNS + 3개 Alarm)
+
+**선택 이유:**
+- 독립적인 리소스 (다른 리소스와 의존성 없음)
+- 변경 빈도 낮음
+- 하위 모듈로 나눌 필요 없음
+
+---
+
+### 실무 vs 개인 프로젝트 차이
+
+#### 실무 (멘토 조언)
+
+**Terraform 사용 범위:**
+- ✅ VPC 인프라 (VPC, Subnet, Route Table, NAT Gateway)
+- ✅ 가벼운 리소스 (ECR, DB Subnet Group)
+- ❌ 보안 그룹 (정책 1개만 달라져도 틀어짐)
+- ❌ RDS (파라미터 1개만 달라져도 틀어짐)
+- ❌ 자주 변경되는 리소스 (콘솔로 관리)
+
+**이유:**
+- 여러 부서/사람이 협업 시 State Lock 충돌
+- 급한 변경은 콘솔로 처리 (Terraform 형상 맞추기 어려움)
+- 변경 빈도 높은 리소스는 Terraform 부적합
+
+#### 개인 프로젝트 (이 프로젝트)
+
+**Terraform 사용 범위:**
+- ✅ 모든 AWS 리소스 (VPC, SecurityGroups, RDS, EKS, Lambda 등)
+- ✅ 14개 모듈로 완전 자동화
+
+**이유:**
+- 1인 개발로 State Lock 충돌 없음
+- 학습 목적 (Terraform 전체 경험)
+- 환경 재구축 용이 (terraform apply 한 번에 전체 인프라 생성)
+
+**만약 협업이었다면:**
+- VPC, Subnet, ECR만 Terraform
+- SecurityGroups, RDS, EKS는 콘솔 관리
+- 세분화 전략으로 각 팀이 독립적으로 작업
+
+---
+
+### 협업 시 형상 관리 이점
+
+#### 시나리오: 보안팀이 급하게 보안 그룹 수정
+
+**세분화 구조 (이 프로젝트):**
+```bash
+# 1. 콘솔에서 급하게 수정
+AWS Console → SecurityGroups → eks-sg → 규칙 추가
+
+# 2. Terraform 형상 맞추기
+cd erp-dev-SecurityGroups/eks-sg
+terraform plan  # eks-sg만 확인 (다른 SG 영향 없음)
+terraform apply  # 20초 소요
+
+# 3. 다른 팀은 계속 작업 가능
+cd erp-dev-Databases/rds
+terraform apply  # State Lock 충돌 없음
+```
+
+**통합 구조 (만약 모든 SG를 하나로):**
+```bash
+# 1. 콘솔에서 급하게 수정
+AWS Console → SecurityGroups → eks-sg → 규칙 추가
+
+# 2. Terraform 형상 맞추기
+cd erp-dev-SecurityGroups
+terraform plan  # 모든 SG 확인 (alb-sg, eks-sg, rds-sg, elasticache-sg)
+terraform apply  # 2분 소요
+
+# 3. 다른 팀은 대기 필요
+cd erp-dev-Databases/rds
+terraform apply  # State Lock 충돌! (SecurityGroups apply 중)
+```
+
+**결론:**
+- 세분화 구조는 변경 영향 최소화
+- 각 팀이 독립적으로 작업 가능
+- State Lock 충돌 최소화
+
+---
+
+### 폴더 구조 (최종)
 
 ```
 infrastructure/terraform/dev/
