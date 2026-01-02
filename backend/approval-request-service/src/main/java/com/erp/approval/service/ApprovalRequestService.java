@@ -164,9 +164,9 @@ public class ApprovalRequestService {
     
     private void sendNotification(Integer employeeId, Integer requestId, String result, Integer rejectedBy) {
         try {
-            String url = notificationServiceUrl + "/notifications/send";
+            String url = notificationServiceUrl + "/notifications/send/" + employeeId;
             Map<String, Object> notification = new HashMap<>();
-            notification.put("requestId", requestId);
+            notification.put("approvalId", requestId);
             notification.put("status", result);
             notification.put("message", "approved".equals(result) ? "결재가 승인되었습니다" : "결재가 반려되었습니다");
             if (rejectedBy != null) {
