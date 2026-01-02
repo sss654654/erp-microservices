@@ -11,13 +11,62 @@
 
 ### 통신 방식 변경: gRPC → Kafka
 
-| 항목 | 2단계 (gRPC) | 3단계 (Kafka) |
-|------|-------------|---------------|
-| **통신 방식** | 동기 (Blocking) | 비동기 (Non-blocking) |
-| **평균 응답 시간** | 850ms | 120ms (85% ↓) |
-| **처리량** | 35 req/sec | 250 req/sec (614% ↑) |
-| **에러율** | 5% | 0% |
-| **장애 격리** | 없음 | 메시지 보존 |
+#### 2단계: gRPC 동기 통신의 한계
+
+```
+Approval Request Service
+  ↓ gRPC 동기 호출 (Blocking)
+  ↓ 응답 대기... (850ms)
+Approval Processing Service
+```
+
+**측정 결과:**
+- 평균 응답 시간: 850ms
+- 에러율: 5% (타임아웃)
+- 처리량: 35 req/sec
+- **문제**: Processing Service 다운 시 Request Service도 실패
+
+#### 3단계: Kafka 비동기 메시징으로 전환
+
+```
+Approval Request Service
+  ↓ Kafka Produce (비동기, 즉시 반환)
+Kafka Topic (approval-requests)
+  ↓ Consumer Group (병렬 처리)
+Approval Processing Service
+```
+
+**개선 결과:**
+
+| 항목 | 2단계 (gRPC) | 3단계 (Kafka) | 개선율 |
+|------|-------------|---------------|--------|
+| **통신 방식** | 동기 (Blocking) | 비동기 (Non-blocking) | - |
+| **평균 응답 시간** | 850ms | 120ms | 85% ↓ |
+| **처리량** | 35 req/sec | 250 req/sec | 614% ↑ |
+| **에러율** | 5% | 0% | 100% ↓ |
+| **장애 격리** | 없음 | 메시지 보존 | ✅ |
+
+**핵심 개선:**
+- Request Service는 Kafka에 메시지만 전송하고 즉시 반환 (120ms)
+- Processing Service가 다운되어도 메시지는 Kafka에 보존
+- Consumer Group으로 병렬 처리 (처리량 614% 증가)
+- Offset 관리로 재처리 가능
+
+#### Kinesis vs Kafka 선택
+
+**CGV 프로젝트 (Kinesis):**
+- 단일 서비스 내 대기열 (API 서버 → Kinesis → 동일 서버)
+- 대량 트래픽 버퍼링 목적
+- 단일 Consumer
+
+**ERP 프로젝트 (Kafka):**
+- 서비스 간 메시징 (Request → Kafka → Processing)
+- 비동기 통신 목적
+- Consumer Group (병렬 처리)
+
+**선택 이유:**
+- 마이크로서비스 환경에서는 Consumer Group과 Offset 관리가 유리
+- Kafka on EKS: MSK $300/월 대신 기존 EKS 노드 활용 (추가 비용 없음)
 
 ### 추가 기능
 - ✅ **출퇴근 관리** (Attendance)
