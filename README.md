@@ -298,54 +298,85 @@ https://du4qmhnfmr4fb.cloudfront.net
 
 > ⚠️ **주의**: Terraform 재배포 시 API Gateway URL, Cognito User Pool ID, CloudFront URL이 변경될 수 있습니다. 변경 시 프론트엔드 `.env.production` 파일을 업데이트하고 재빌드 후 S3에 업로드해야 합니다.
 
-**스크린샷 가이드**: 
-- 로그인 화면: CloudFront URL 접속 → Cognito 로그인 화면
-- 결재 요청 화면: 로그인 후 → 결재 요청 목록 및 생성 화면
-- 실시간 알림: 결재 승인/반려 시 → WebSocket 알림 팝업
+**로그인 → 사원 결재 요청 → 부장 결재 승인:**
+
+| 로그인 화면 | 사원 결재 요청 | 부장 결재 승인 |
+|------------|---------------|---------------|
+| ![로그인](./docs/images/로그인.png) | ![사원결재](./docs/images/사원결재.png) | ![부장결재](./docs/images/부장결재.png) |
+| Cognito 인증 (JWT 토큰 발급) | Lambda (Employee) → MongoDB (결재 요청 생성) → Kafka (Processing 전달) | MongoDB (결재 조회) → Lambda (연차 차감) → Notification (알림 발송) |
+
+**사원 대시보드 → 부장 대시보드:**
+
+| 사원 대시보드 | 부장 대시보드 |
+|--------------|--------------|
+| ![사원대시보드](./docs/images/사원대시보드.png) | ![부장대시보드](./docs/images/부장대시보드.png) |
+| Lambda (Employee: 출근/퀘스트) + MongoDB (결재 내역) | Lambda (Employee: 팀원 관리) + MongoDB (결재 승인 대기) |
 
 ### CI/CD 파이프라인
 
 **CodePipeline 실행 결과:**
 
-**스크린샷 가이드**: AWS Console → CodePipeline → `erp-unified-pipeline` → 최근 실행 내역 → Source (성공) + Build (성공) 단계 확인, 총 소요 시간 3분 11초 표시
+![CodePipeline 실행 결과](./docs/images/CodePipeline%20실행%20결과.png)
+
+- Source 단계: GitHub 연동 (CodeStar Connection)
+- Build 단계: CodeBuild 실행
+- 총 소요 시간: 3분 11초
 
 **CodeBuild 로그:**
 
-**스크린샷 가이드**: AWS Console → CodeBuild → `erp-unified-build` → Build history → 최근 빌드 선택 → Phase details 탭 → INSTALL, PRE_BUILD, BUILD, POST_BUILD 각 단계별 소요 시간 확인
+![CodeBuild 로그](./docs/images/CodeBuild%20로그.png)
+
+- INSTALL: 의존성 설치
+- PRE_BUILD: ECR 로그인, 변경 감지
+- BUILD: Docker 이미지 빌드 & 푸시
+- POST_BUILD: Helm 배포
 
 ### AWS 리소스 현황
 
 **Lambda 함수:**
-```bash
-$ aws lambda list-functions --query 'Functions[?starts_with(FunctionName, `erp-dev`)].FunctionName' --region ap-northeast-2
-```
-**스크린샷 가이드**: AWS Console → Lambda → Functions → `erp-dev-auto-confirm` 함수 확인 (또는 터미널 명령어 실행 결과)
+
+![Lambda 함수](./docs/images/람다.png)
+
+- erp-dev-employee-service, erp-dev-auto-confirm 2개 함수 실행 중
 
 **RDS 인스턴스:**
-```bash
-$ aws rds describe-db-instances --db-instance-identifier erp-dev-mysql --region ap-northeast-2
-```
-**스크린샷 가이드**: AWS Console → RDS → Databases → `erp-dev-mysql` → Status: Available, Engine: MySQL 8.0, Instance class: db.t3.micro 확인
+
+![RDS 인스턴스](./docs/images/RDS%20인스턴스.png)
+
+- erp-dev-mysql (db.t3.micro, MySQL, available)
 
 **ElastiCache 클러스터:**
-```bash
-$ aws elasticache describe-cache-clusters --cache-cluster-id erp-dev-redis --region ap-northeast-2
-```
-**스크린샷 가이드**: AWS Console → ElastiCache → Redis clusters → `erp-dev-redis` → Status: Available, Engine: Redis 7.0, Node type: cache.t3.micro 확인
+
+![ElastiCache 클러스터](./docs/images/ElastiCache%20클러스터.png)
+
+- erp-dev-redis (cache.t3.micro, Redis 7.0.7, available)
 
 ### 모니터링
 
 **CloudWatch Logs:**
 
-**스크린샷 가이드**: AWS Console → CloudWatch → Log groups → `/aws/eks/erp-dev/application` → 최근 로그 스트림 선택 → Pod 로그 (INFO, ERROR 등) 확인
+![CloudWatch 로그](./docs/images/CloudWatch%20로그.png)
+
+- Log Group: /aws/eks/erp-dev/application에서 approval-request-service Pod 로그 실시간 확인
 
 **CloudWatch Alarm:**
 
-**스크린샷 가이드**: AWS Console → CloudWatch → Alarms → `erp-dev-high-error-rate`, `erp-dev-pod-restarts`, `erp-dev-lambda-error-rate` 3개 Alarm → State: OK 또는 ALARM 상태 확인
+![CloudWatch Alarm](./docs/images/CloudWatch%20Alarm.png)
+
+- erp-dev-high-error-rate Alarm 발생 (ERROR 로그 5분 10회 이상)
+- SNS 이메일 알림: OK → ALARM 상태 변경, ErrorCount 메트릭 16.0 감지
 
 **X-Ray Service Map:**
 
-**스크린샷 가이드**: AWS Console → X-Ray → Service map → EKS 서비스 간 호출 관계 (approval-request → approval-processing, notification) 및 응답 시간 시각화 확인
+![X-Ray Service Map](./docs/images/X-Ray.png)
+
+- 클라이언트 → approval-request-service (EKS): HTTP 요청 트레이스
+- 클라이언트 → erp-dev-employee-service (Lambda Context): Lambda 함수 호출 트레이스
+- Lambda Context → Lambda Function: Lambda 내부 실행 트레이스
+
+**X-Ray 트레이스 제한사항:**
+- ✅ HTTP/HTTPS 호출: 자동 트레이스 (Lambda, EKS 서비스)
+- ❌ Kafka 메시징: 자동 트레이스 불가 (수동 계측 필요)
 
 ---
 
