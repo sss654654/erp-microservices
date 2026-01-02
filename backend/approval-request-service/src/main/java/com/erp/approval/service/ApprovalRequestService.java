@@ -230,6 +230,19 @@ public class ApprovalRequestService {
                     System.err.println("연차 차감 실패: " + e.getMessage());
                 }
             }
+            
+            // 알림 전송
+            try {
+                String notificationUrl = notificationServiceUrl + "/notifications";
+                Map<String, Object> notification = Map.of(
+                    "employeeId", approval.getRequesterId(),
+                    "message", "결재가 승인되었습니다: " + approval.getTitle(),
+                    "type", "APPROVAL_APPROVED"
+                );
+                restTemplate.postForEntity(notificationUrl, notification, String.class);
+            } catch (Exception e) {
+                System.err.println("알림 전송 실패: " + e.getMessage());
+            }
         }
         
         approval.setUpdatedAt(LocalDateTime.now());
