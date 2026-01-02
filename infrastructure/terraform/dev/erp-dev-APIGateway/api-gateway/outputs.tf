@@ -9,3 +9,7 @@ output "api_id" {
 output "vpc_link_id" {
   value = aws_apigatewayv2_vpc_link.main.id
 }
+
+output "websocket_url" {
+  value = aws_apigatewayv2_api.websocket.api_endpoint
+}

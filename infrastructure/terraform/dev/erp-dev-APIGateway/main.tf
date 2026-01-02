@@ -85,6 +85,7 @@ module "api_gateway" {
   security_group_ids  = [data.terraform_remote_state.alb_sg.outputs.sg_id]
   
   nlb_listener_arns = module.nlb.listener_arns
+  nlb_dns_name      = module.nlb.nlb_dns_name
 }
 
 output "api_endpoint" {
@@ -93,6 +94,10 @@ output "api_endpoint" {
 
 output "api_id" {
   value = module.api_gateway.api_id
+}
+
+output "websocket_url" {
+  value = module.api_gateway.websocket_url
 }
 
 output "nlb_dns_name" {

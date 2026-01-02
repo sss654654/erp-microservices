@@ -22,3 +22,8 @@ variable "nlb_listener_arns" {
   description = "NLB listener ARNs"
   type        = map(string)
 }
+
+variable "nlb_dns_name" {
+  description = "NLB DNS name"
+  type        = string
+}
