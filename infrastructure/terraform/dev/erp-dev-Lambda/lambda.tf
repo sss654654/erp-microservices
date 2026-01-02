@@ -118,6 +118,23 @@ resource "aws_iam_role_policy" "lambda_secrets" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_xray" {
+  role = aws_iam_role.lambda.id
+  name = "lambda-xray-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_lambda_function" "employee" {
   function_name = "${var.project_name}-${var.environment}-employee-service"
   role          = aws_iam_role.lambda.arn
@@ -138,6 +155,10 @@ resource "aws_lambda_function" "employee" {
       AWS_LWA_PORT               = "8081"
       SERVER_PORT                = "8081"
     }
+  }
+  
+  tracing_config {
+    mode = "Active"
   }
   
   memory_size = 2048
