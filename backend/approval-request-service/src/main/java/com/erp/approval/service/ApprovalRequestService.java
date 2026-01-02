@@ -233,7 +233,7 @@ public class ApprovalRequestService {
             
             // 알림 전송
             try {
-                String notificationUrl = notificationServiceUrl + "/notifications";
+                String notificationUrl = notificationServiceUrl + "/notifications/send";
                 Map<String, Object> notification = Map.of(
                     "employeeId", approval.getRequesterId(),
                     "message", "결재가 승인되었습니다: " + approval.getTitle(),
