@@ -29,7 +29,13 @@
 
 ### 전체 인프라 구조
 
-> 📌 **전체 아키텍처 다이어그램 추가 예정**
+![ERP 전체 아키텍처](./docs/images/전체%20아키텍처.png)
+
+**아키텍처 구성:**
+- **왼쪽**: 사용자 플로우 (CloudFront → S3 → API Gateway → Lambda/VPC Link)
+- **중앙**: VPC 내부 (Multi-AZ EKS, RDS, ElastiCache, NLB)
+- **오른쪽**: 개발자 CI/CD 플로우 (GitHub → CodePipeline → CodeBuild → ECR → EKS)
+- **하단**: 외부 서비스 (Secrets Manager, Parameter Store, MongoDB Atlas, SNS, CloudWatch, X-Ray)
 
 ### 데이터 플로우
 
@@ -272,113 +278,74 @@ VPC: 10.0.0.0/16
 **Pods (12개 실행 중):**
 ```bash
 $ kubectl get pods -n erp-dev
-NAME                                    READY   STATUS    RESTARTS   AGE
-approval-request-7d8f9b5c4d-abc12       2/2     Running   0          2d
-approval-request-7d8f9b5c4d-def34       2/2     Running   0          2d
-approval-processing-6c7d8e9f5a-ghi56    2/2     Running   0          2d
-approval-processing-6c7d8e9f5a-jkl78    2/2     Running   0          2d
-notification-5b6c7d8e9f-mno90           2/2     Running   0          2d
-notification-5b6c7d8e9f-pqr12           2/2     Running   0          2d
-kafka-0                                 1/1     Running   0          2d
-kafka-1                                 1/1     Running   0          2d
-zookeeper-0                             1/1     Running   0          2d
-zookeeper-1                             1/1     Running   0          2d
-fluent-bit-xxxxx                        1/1     Running   0          2d
-aws-load-balancer-controller-xxxxx      1/1     Running   0          2d
 ```
 
-> 스크린샷 추가 예정
+![Kubernetes Pods](./docs/images/Pods.png)
 
 **Services:**
 ```bash
 $ kubectl get svc -n erp-dev
-NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-approval-request      ClusterIP   10.100.123.45    <none>        8082/TCP   2d
-approval-processing   ClusterIP   10.100.123.46    <none>        8083/TCP   2d
-notification          ClusterIP   10.100.123.47    <none>        8084/TCP   2d
-kafka                 ClusterIP   10.100.123.48    <none>        9092/TCP   2d
-zookeeper             ClusterIP   10.100.123.49    <none>        2181/TCP   2d
 ```
+
+![Kubernetes Services](./docs/images/Services.png)
 
 ### 프론트엔드 화면
 
-**로그인 화면:**
+**CloudFront URL 접속:**
+```
+https://du4qmhnfmr4fb.cloudfront.net
+```
 
-> 스크린샷 추가 예정
+> ⚠️ **주의**: Terraform 재배포 시 API Gateway URL, Cognito User Pool ID, CloudFront URL이 변경될 수 있습니다. 변경 시 프론트엔드 `.env.production` 파일을 업데이트하고 재빌드 후 S3에 업로드해야 합니다.
 
-**결재 요청 화면:**
-
-> 스크린샷 추가 예정
-
-**실시간 알림 (WebSocket):**
-
-> 스크린샷 추가 예정
+**스크린샷 가이드**: 
+- 로그인 화면: CloudFront URL 접속 → Cognito 로그인 화면
+- 결재 요청 화면: 로그인 후 → 결재 요청 목록 및 생성 화면
+- 실시간 알림: 결재 승인/반려 시 → WebSocket 알림 팝업
 
 ### CI/CD 파이프라인
 
-**CodePipeline 실행 결과 (3분 11초):**
+**CodePipeline 실행 결과:**
 
-> 스크린샷 추가 예정
+**스크린샷 가이드**: AWS Console → CodePipeline → `erp-unified-pipeline` → 최근 실행 내역 → Source (성공) + Build (성공) 단계 확인, 총 소요 시간 3분 11초 표시
 
 **CodeBuild 로그:**
-```
-Phase: INSTALL - Duration: 12s
-Phase: PRE_BUILD - Duration: 8s
-Phase: BUILD - Duration: 2m 34s
-  - Maven Build: 1m 20s
-  - Docker Build: 54s
-  - ECR Push: 20s
-Phase: POST_BUILD - Duration: 17s
-  - Helm Upgrade: 17s
 
-Total Duration: 3m 11s
-Status: SUCCEEDED
-```
+**스크린샷 가이드**: AWS Console → CodeBuild → `erp-unified-build` → Build history → 최근 빌드 선택 → Phase details 탭 → INSTALL, PRE_BUILD, BUILD, POST_BUILD 각 단계별 소요 시간 확인
 
 ### AWS 리소스 현황
 
 **Lambda 함수:**
 ```bash
-$ aws lambda list-functions --query 'Functions[?starts_with(FunctionName, `erp-dev`)].FunctionName'
-[
-  "erp-dev-employee-service"
-]
+$ aws lambda list-functions --query 'Functions[?starts_with(FunctionName, `erp-dev`)].FunctionName' --region ap-northeast-2
 ```
+**스크린샷 가이드**: AWS Console → Lambda → Functions → `erp-dev-auto-confirm` 함수 확인 (또는 터미널 명령어 실행 결과)
 
 **RDS 인스턴스:**
 ```bash
-$ aws rds describe-db-instances --db-instance-identifier erp-dev-mysql
-Status: available
-Engine: mysql 8.0
-Instance Class: db.t3.micro
-Storage: 20 GB
+$ aws rds describe-db-instances --db-instance-identifier erp-dev-mysql --region ap-northeast-2
 ```
+**스크린샷 가이드**: AWS Console → RDS → Databases → `erp-dev-mysql` → Status: Available, Engine: MySQL 8.0, Instance class: db.t3.micro 확인
 
 **ElastiCache 클러스터:**
 ```bash
-$ aws elasticache describe-cache-clusters --cache-cluster-id erp-dev-redis
-Status: available
-Engine: redis 7.0
-Node Type: cache.t3.micro
+$ aws elasticache describe-cache-clusters --cache-cluster-id erp-dev-redis --region ap-northeast-2
 ```
+**스크린샷 가이드**: AWS Console → ElastiCache → Redis clusters → `erp-dev-redis` → Status: Available, Engine: Redis 7.0, Node type: cache.t3.micro 확인
 
 ### 모니터링
 
-**CloudWatch Logs (ERROR 로그 감지):**
+**CloudWatch Logs:**
 
-> 스크린샷 추가 예정
+**스크린샷 가이드**: AWS Console → CloudWatch → Log groups → `/aws/eks/erp-dev/application` → 최근 로그 스트림 선택 → Pod 로그 (INFO, ERROR 등) 확인
 
-**CloudWatch Alarm 상태:**
-```bash
-$ aws cloudwatch describe-alarms --alarm-names erp-dev-high-error-rate
-AlarmName: erp-dev-high-error-rate
-StateValue: OK
-Threshold: 10 errors in 5 minutes
-```
+**CloudWatch Alarm:**
+
+**스크린샷 가이드**: AWS Console → CloudWatch → Alarms → `erp-dev-high-error-rate`, `erp-dev-pod-restarts`, `erp-dev-lambda-error-rate` 3개 Alarm → State: OK 또는 ALARM 상태 확인
 
 **X-Ray Service Map:**
 
-> 스크린샷 추가 예정
+**스크린샷 가이드**: AWS Console → X-Ray → Service map → EKS 서비스 간 호출 관계 (approval-request → approval-processing, notification) 및 응답 시간 시각화 확인
 
 ---
 

@@ -16,6 +16,15 @@ data "terraform_remote_state" "eks_sg" {
   }
 }
 
+data "terraform_remote_state" "lambda" {
+  backend = "s3"
+  config = {
+    bucket = "erp-terraform-state-subin-bucket"
+    key    = "dev/lambda/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}
+
 resource "aws_security_group" "rds" {
   name        = "${var.project_name}-${var.environment}-rds-sg"
   description = "Security group for RDS MySQL"
@@ -27,6 +36,14 @@ resource "aws_security_group" "rds" {
     protocol        = "tcp"
     security_groups = [data.terraform_remote_state.eks_sg.outputs.sg_id]
     description     = "MySQL from EKS"
+  }
+
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [data.terraform_remote_state.lambda.outputs.lambda_sg_id]
+    description     = "MySQL from Lambda"
   }
 
   egress {

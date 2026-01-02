@@ -78,11 +78,12 @@ module "eks_node_group" {
   node_max_size       = 3
 }
 
-module "eks_cluster_sg_rules" {
-  source       = "./eks-cluster-sg-rules"
-  project_name = var.project_name
-  environment  = var.environment
-}
+# EKS 클러스터 생성 후 활성화
+# module "eks_cluster_sg_rules" {
+#   source       = "./eks-cluster-sg-rules"
+#   project_name = var.project_name
+#   environment  = var.environment
+# }
 
 output "cluster_name" {
   value = module.eks_cluster.cluster_name

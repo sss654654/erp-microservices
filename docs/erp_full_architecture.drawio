@@ -1,0 +1,264 @@
+<mxfile host="app.diagrams.net" modified="2026-01-02T08:00:00.000Z">
+  <diagram name="ERP Full Architecture" id="erp-full">
+    <mxGraphModel dx="2400" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1400">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <!-- 제목 -->
+        <mxCell id="title" value="ERP 마이크로서비스 전자결재 시스템 - 전체 아키텍처" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=24;fontStyle=1;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="700" y="20" width="800" height="40" as="geometry"/>
+        </mxCell>
+        
+        <!-- 기술 스택 (상단) -->
+        <mxCell id="tech-stack" value="Technology Stack" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="200" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="tech1" value="Spring Boot 3.3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="100" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech2" value="Kafka 7.5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="170" y="120" width="80" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech3" value="Redis 7.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="260" y="120" width="80" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech4" value="MongoDB 7.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="350" y="120" width="100" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech5" value="MySQL 8.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="460" y="120" width="80" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech6" value="Terraform 1.6" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="550" y="120" width="100" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech7" value="EKS 1.31" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="660" y="120" width="80" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="tech8" value="React 18" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="750" y="120" width="80" height="35" as="geometry"/>
+        </mxCell>
+        
+        <!-- 사용자 플로우 (왼쪽) -->
+        <mxCell id="user" value="사용자" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="220" width="40" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="cloudfront" value="CloudFront&#xa;(CDN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="340" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="s3" value="S3&#xa;(React SPA)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="440" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="apigw" value="API Gateway&#xa;(HTTP API)&#xa;+ Cognito" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="540" width="100" height="80" as="geometry"/>
+        </mxCell>
+        
+        <!-- VPC 큰 박스 -->
+        <mxCell id="vpc" value="VPC (10.0.0.0/16)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontSize=14;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="250" y="200" width="1400" height="900" as="geometry"/>
+        </mxCell>
+        
+        <!-- Public Subnet -->
+        <mxCell id="public-subnet" value="Public Subnet (10.0.1.0/24, 10.0.2.0/24)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontSize=12;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="280" y="240" width="600" height="100" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="nat" value="NAT Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="300" y="270" width="120" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="igw" value="Internet Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="440" y="270" width="120" height="50" as="geometry"/>
+        </mxCell>
+        
+        <!-- Private Subnet (EKS) -->
+        <mxCell id="private-subnet" value="Private Subnet (10.0.10.0/24, 10.0.11.0/24) - EKS Cluster" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=12;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="280" y="370" width="1100" height="500" as="geometry"/>
+        </mxCell>
+        
+        <!-- Service Node Group -->
+        <mxCell id="service-ng" value="Service Node Group (t3.small × 2)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=11;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="310" y="410" width="480" height="240" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="req-pod" value="approval-request&#xa;Pod × 2&#xa;Port: 8082&#xa;MongoDB + Kafka" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="330" y="450" width="130" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="proc-pod" value="approval-processing&#xa;Pod × 2&#xa;Port: 8083&#xa;In-Memory + Kafka" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="330" y="550" width="130" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="noti-pod" value="notification&#xa;Pod × 2&#xa;Port: 8084&#xa;Redis + WebSocket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="490" y="450" width="130" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="fluent" value="Fluent Bit&#xa;DaemonSet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="490" y="550" width="130" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="xray" value="X-Ray&#xa;DaemonSet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="450" width="130" height="50" as="geometry"/>
+        </mxCell>
+        
+        <!-- Kafka Node Group -->
+        <mxCell id="kafka-ng" value="Kafka Node Group (t3.small × 2)&#xa;Taint: workload=kafka" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontSize=11;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="820" y="410" width="280" height="240" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="kafka-pod" value="kafka Pod × 2&#xa;Port: 9092&#xa;Topics:&#xa;- approval-requests&#xa;- approval-results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="840" y="450" width="120" height="90" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="zk-pod" value="zookeeper&#xa;Pod × 2&#xa;Port: 2181" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="970" y="450" width="110" height="70" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="nlb" value="NLB&#xa;(Network Load Balancer)&#xa;Target Groups:&#xa;8082, 8083, 8084" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="410" width="200" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Data Subnet -->
+        <mxCell id="data-subnet" value="Data Subnet (10.0.20.0/24, 10.0.21.0/24)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontSize=12;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="280" y="900" width="600" height="170" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="rds" value="RDS MySQL 8.0&#xa;(db.t3.micro)&#xa;Single-AZ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="300" y="940" width="140" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="elasticache" value="ElastiCache&#xa;Redis 7.0&#xa;(cache.t3.micro)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="940" width="140" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="lambda" value="Lambda&#xa;employee-service&#xa;Memory: 2048MB&#xa;Timeout: 60s&#xa;VPC: Private Subnet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="950" y="900" width="150" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- 개발자 플로우 (오른쪽) -->
+        <mxCell id="developer" value="개발자" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="220" width="40" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="github" value="GitHub&#xa;(Source Code)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="340" width="140" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="codepipeline" value="CodePipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="440" width="140" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="codebuild" value="CodeBuild&#xa;- Parameter Store&#xa;- Git diff&#xa;- Maven + Docker&#xa;- ECR Push&#xa;- Lambda Update&#xa;- Helm Deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="520" width="140" height="140" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="ecr" value="ECR&#xa;4 Repositories:&#xa;- employee-lambda&#xa;- approval-request&#xa;- approval-processing&#xa;- notification" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="690" width="140" height="120" as="geometry"/>
+        </mxCell>
+        
+        <!-- 외부 서비스 (하단) -->
+        <mxCell id="external-title" value="External Services" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="1150" width="200" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="mongodb" value="MongoDB Atlas&#xa;(External)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="250" y="1190" width="120" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="cognito" value="Cognito&#xa;User Pool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="390" y="1190" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="secrets" value="Secrets Manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="510" y="1190" width="120" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="param" value="Parameter Store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1190" width="120" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="cwlogs" value="CloudWatch Logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="790" y="1190" width="120" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="xray-svc" value="X-Ray" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="930" y="1190" width="80" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="sns" value="SNS&#xa;(Email)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="1190" width="80" height="60" as="geometry"/>
+        </mxCell>
+        
+        <!-- 화살표 (주요 플로우만) -->
+        <mxCell id="arrow1" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="user" target="cloudfront">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow2" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="cloudfront" target="s3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow3" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="s3" target="apigw">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow4" value="VPC Link" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="apigw" target="nlb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow5" value="Direct" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="apigw" target="lambda">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow6" value="Kafka" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#d6b656;dashed=1;" edge="1" parent="1" source="req-pod" target="kafka-pod">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow7" value="Kafka" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#d6b656;dashed=1;" edge="1" parent="1" source="proc-pod" target="kafka-pod">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow8" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="noti-pod" target="elasticache">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow9" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="lambda" target="rds">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow10" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="developer" target="github">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow11" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="github" target="codepipeline">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow12" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="codepipeline" target="codebuild">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow13" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="codebuild" target="ecr">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow14" value="Pull" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="ecr" target="service-ng">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow15" value="Logs" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="fluent" target="cwlogs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="arrow16" value="Trace" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="xray" target="xray-svc">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

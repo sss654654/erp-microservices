@@ -546,71 +546,204 @@ https://console.aws.amazon.com/xray/home?region=ap-northeast-2#/service-map
 
 ## Kafka 구현
 
-### 현재 구조 (Deployment)
+### StatefulSet 아키텍처 (현재)
+
+**Kafka와 Zookeeper를 StatefulSet으로 배포하여 클러스터 구성:**
 
 ```yaml
-# templates/kafka-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-      - name: kafka
-        image: confluentinc/cp-kafka:latest
-        env:
-        - name: KAFKA_BROKER_ID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-```
-
-**문제점:**
-1. 데이터 영속성 없음 (volumeClaimTemplates 없음)
-2. Pod 재시작 시 메시지 소실
-3. Stateful 애플리케이션을 Deployment로 배포
-
-### 개선 방안 (StatefulSet)
-
-```yaml
+# templates/kafka.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
 spec:
-  serviceName: kafka-headless
-  replicas: 3
-  volumeClaimTemplates:
-  - metadata:
-      name: kafka-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      storageClassName: gp3
-      resources:
-        requests:
-          storage: 10Gi
+  serviceName: kafka
+  replicas: 2
   template:
     spec:
       containers:
       - name: kafka
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /var/lib/kafka/data
+        env:
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper-0.zookeeper.erp-dev.svc.cluster.local:2181,zookeeper-1.zookeeper.erp-dev.svc.cluster.local:2181"
+        command:
+        - bash
+        - -c
+        - |
+          export KAFKA_BROKER_ID=${HOSTNAME##*-}
+          export KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://${HOSTNAME}.kafka.erp-dev.svc.cluster.local:9092
+          /etc/confluent/docker/run
 ```
 
-**개선 효과:**
-- 각 Pod마다 고유 EBS 볼륨 (10Gi)
-- Pod 재시작 시 데이터 보존
-- 고정된 Pod 이름 (kafka-0, kafka-1, kafka-2)
-- 비용: $2.4/월 (10Gi × 3개 × $0.08/GB)
+**핵심 구성:**
+1. **고정 Pod 이름**: kafka-0, kafka-1 (StatefulSet 특성)
+2. **동적 Broker ID**: Pod 이름에서 추출 (kafka-0 → ID 0, kafka-1 → ID 1)
+3. **고유 Advertised Listener**: 각 Pod가 고유한 DNS 주소 사용
+4. **Zookeeper 앙상블 연결**: 2개 Zookeeper에 모두 연결하여 클러스터 형성
 
-**프로덕션 권장:**
-- MSK (Managed Streaming for Kafka) 사용
+**Deployment vs StatefulSet 차이:**
+
+| 항목 | Deployment (이전) | StatefulSet (현재) |
+|------|------------------|-------------------|
+| Pod 이름 | kafka-abc123 (랜덤) | kafka-0, kafka-1 (고정) |
+| Broker ID | 모두 1 (중복) | 0, 1 (고유) |
+| 클러스터 형성 | ❌ 각각 독립 클러스터 | ✅ 단일 클러스터 |
+| Advertised Listener | 동일 주소 (충돌) | 고유 주소 |
+| 데이터 영속성 | ❌ 없음 | ✅ PVC 사용 가능 |
+
+**문제 해결:**
+- **이전 문제**: Deployment로 배포 시 각 Pod가 독립적인 Kafka 클러스터로 동작
+  - approval-request → Kafka Pod 1 (Cluster ID: 9ojHPJ23T6WjI92cqtr0GA)
+  - approval-processing → Kafka Pod 2 (Cluster ID: hv1xOsFzReuYnHZ8dqtADg)
+  - 메시지가 서로 다른 클러스터에 저장되어 소비 불가
+
+- **해결**: StatefulSet으로 변경하여 단일 클러스터 구성
+  - 모든 서비스가 동일한 Kafka 클러스터에 연결
+  - 메시지 발행/소비 정상 작동
+
+### Zookeeper 앙상블
+
+**Zookeeper란?**
+- Kafka 클러스터의 메타데이터 관리자
+- 브로커 상태, 토픽 설정, 파티션 리더 정보 등을 저장
+- Kafka 브로커들이 서로를 발견하고 조율하는 중앙 코디네이터
+
+**Zookeeper가 하는 일:**
+1. **브로커 등록**: kafka-0, kafka-1이 시작되면 Zookeeper에 자신을 등록
+2. **리더 선출**: 각 파티션의 리더 브로커 결정 (kafka-0 또는 kafka-1)
+3. **메타데이터 저장**: 토픽 목록, 파티션 개수, 복제 설정 등
+4. **장애 감지**: 브로커가 죽으면 감지하고 새 리더 선출
+5. **설정 동기화**: 모든 브로커가 동일한 클러스터 설정 공유
+
+**앙상블(Ensemble)이란?**
+- Zookeeper 서버들의 클러스터 (최소 3개, 홀수 권장)
+- 과반수(Quorum) 방식으로 동작
+  - 2개 중 1개 죽으면: ❌ 과반수 없음 → 서비스 중단
+  - 3개 중 1개 죽으면: ✅ 과반수 유지 → 정상 작동
+- 현재 구성: 2개 (개발 환경, 프로덕션은 3개 권장)
+
+**동작 흐름:**
+```
+1. Kafka 시작
+   kafka-0 → zookeeper-0, zookeeper-1에 연결
+   kafka-1 → zookeeper-0, zookeeper-1에 연결
+
+2. 브로커 등록
+   Zookeeper: /brokers/ids/0 → kafka-0 정보 저장
+   Zookeeper: /brokers/ids/1 → kafka-1 정보 저장
+
+3. 토픽 생성 (approval-requests)
+   Zookeeper: /brokers/topics/approval-requests
+   - 파티션 0: 리더 kafka-0, 복제본 kafka-1
+   - 파티션 1: 리더 kafka-1, 복제본 kafka-0
+
+4. 메시지 발행
+   Producer → kafka-0 (파티션 0 리더)
+   kafka-0 → kafka-1 (복제)
+   Zookeeper: 오프셋 정보 업데이트
+
+5. 장애 발생 (kafka-0 죽음)
+   Zookeeper: kafka-0 감지 → kafka-1을 새 리더로 선출
+   Consumer → kafka-1로 자동 전환
+```
+
+```yaml
+# templates/kafka.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  serviceName: zookeeper
+  replicas: 2
+  template:
+    spec:
+      containers:
+      - name: zookeeper
+        ports:
+        - containerPort: 2181  # 클라이언트 연결 (Kafka가 사용)
+          name: client
+        - containerPort: 2888  # Follower가 Leader에 연결
+          name: follower
+        - containerPort: 3888  # Leader 선출 투표
+          name: election
+        env:
+        - name: ZOOKEEPER_SERVERS
+          # 앙상블 구성: 서로의 주소 등록
+          value: "zookeeper-0.zookeeper.erp-dev.svc.cluster.local:2888:3888;zookeeper-1.zookeeper.erp-dev.svc.cluster.local:2888:3888"
+        command:
+        - bash
+        - -c
+        - |
+          # Pod 이름에서 ID 추출 (zookeeper-0 → 1, zookeeper-1 → 2)
+          export ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-}+1))
+          /etc/confluent/docker/run
+```
+
+**포트 설명:**
+- **2181 (client)**: Kafka 브로커가 연결하는 포트
+- **2888 (follower)**: Follower Zookeeper가 Leader에게 데이터 동기화
+- **3888 (election)**: Leader 선출 시 투표에 사용
+
+**앙상블 구성:**
+- zookeeper-0: Server ID 1
+- zookeeper-1: Server ID 2
+- 2개 Zookeeper가 서로 연결되어 고가용성 확보
+- Kafka가 2개 Zookeeper 모두에 연결
+
+### 배포 및 확인
+
+**배포:**
+```bash
+# 기존 Deployment 삭제
+kubectl delete deployment kafka zookeeper -n erp-dev
+
+# StatefulSet 배포
+cd helm-chart
+helm template . -f values-dev.yaml --show-only templates/kafka.yaml | kubectl apply -f -
+
+# 서비스 재시작 (새 Kafka 클러스터 연결)
+kubectl rollout restart deployment/approval-request-service -n erp-dev
+kubectl rollout restart deployment/approval-processing-service -n erp-dev
+```
+
+**확인:**
+```bash
+# Pod 상태 (고정 이름 확인)
+kubectl get pods -n erp-dev | grep -E "kafka|zookeeper"
+# kafka-0, kafka-1, zookeeper-0, zookeeper-1
+
+# Kafka 클러스터 확인
+kubectl exec -n erp-dev kafka-0 -- kafka-broker-api-versions --bootstrap-server localhost:9092
+# 2개 브로커 표시되어야 함
+
+# 토픽 확인
+kubectl exec -n erp-dev kafka-0 -- kafka-topics --bootstrap-server localhost:9092 --list
+
+# Consumer Group 확인
+kubectl exec -n erp-dev kafka-0 -- kafka-consumer-groups --bootstrap-server localhost:9092 --list
+```
+
+### 개선 방안 (프로덕션)
+
+**1. 영속성 추가 (PVC):**
+```yaml
+volumeClaimTemplates:
+- metadata:
+    name: kafka-data
+  spec:
+    accessModes: [ "ReadWriteOnce" ]
+    storageClassName: gp3
+    resources:
+      requests:
+        storage: 10Gi
+```
+
+**2. MSK (Managed Streaming for Kafka) 전환:**
 - 비용: $310/월
-- 관리 부담 감소, 고가용성 자동 확보
+- 관리 부담 감소
+- 자동 백업, 패치, 모니터링
+- 고가용성 자동 확보
 
 ---
 

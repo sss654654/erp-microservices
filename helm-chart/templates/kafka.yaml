@@ -9,15 +9,17 @@ spec:
   clusterIP: None
   ports:
   - port: 9092
+    name: client
   selector:
     app: kafka
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: kafka
   namespace: {{ .Values.namespace }}
 spec:
+  serviceName: kafka
   replicas: {{ .Values.kafka.replicaCount }}
   selector:
     matchLabels:
@@ -49,19 +51,25 @@ spec:
         image: "{{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}"
         ports:
         - containerPort: 9092
+          name: client
         env:
-        - name: KAFKA_BROKER_ID
-          value: "1"
         - name: KAFKA_ZOOKEEPER_CONNECT
-          value: "zookeeper:2181"
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka.{{ .Values.namespace }}.svc.cluster.local:9092"
+          value: "zookeeper-0.zookeeper.{{ .Values.namespace }}.svc.cluster.local:2181,zookeeper-1.zookeeper.{{ .Values.namespace }}.svc.cluster.local:2181"
         - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
           value: "2"
         - name: KAFKA_MIN_INSYNC_REPLICAS
           value: "1"
         - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
+        - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+          value: "2"
+        command:
+        - bash
+        - -c
+        - |
+          export KAFKA_BROKER_ID=${HOSTNAME##*-}
+          export KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://${HOSTNAME}.kafka.{{ .Values.namespace }}.svc.cluster.local:9092
+          /etc/confluent/docker/run
         resources:
           {{- toYaml .Values.kafka.resources | nindent 10 }}
 {{- end }}
@@ -76,15 +84,21 @@ spec:
   clusterIP: None
   ports:
   - port: 2181
+    name: client
+  - port: 2888
+    name: follower
+  - port: 3888
+    name: election
   selector:
     app: zookeeper
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: zookeeper
   namespace: {{ .Values.namespace }}
 spec:
+  serviceName: zookeeper
   replicas: {{ .Values.zookeeper.replicaCount }}
   selector:
     matchLabels:
@@ -116,11 +130,24 @@ spec:
         image: "{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
         ports:
         - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: follower
+        - containerPort: 3888
+          name: election
         env:
         - name: ZOOKEEPER_CLIENT_PORT
           value: "2181"
         - name: ZOOKEEPER_TICK_TIME
           value: "2000"
+        - name: ZOOKEEPER_SERVERS
+          value: "zookeeper-0.zookeeper.{{ .Values.namespace }}.svc.cluster.local:2888:3888;zookeeper-1.zookeeper.{{ .Values.namespace }}.svc.cluster.local:2888:3888"
+        command:
+        - bash
+        - -c
+        - |
+          export ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-}+1))
+          /etc/confluent/docker/run
         resources:
           {{- toYaml .Values.zookeeper.resources | nindent 10 }}
 {{- end }}

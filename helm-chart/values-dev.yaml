@@ -46,6 +46,10 @@ xray:
       memory: 32Mi
 
 # 공통 설정
+# NOTE: Terraform 재배포 시 아래 엔드포인트 확인 필요
+# - API Gateway URL: terraform output api_gateway_url
+# - RDS Endpoint: terraform output rds_endpoint
+# - Redis Endpoint: terraform output redis_endpoint
 config:
   mongodbUri: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
   redisHost: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"
@@ -60,7 +64,7 @@ services:
     replicaCount: 2
     image:
       repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-request-service
-      tag: latest
+      tag: latest  # CI/CD에서 동적 태그 주입 권장
       pullPolicy: Always
     port: 8082
     resources:
@@ -75,12 +79,12 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/665fd67efb37d9fb"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-req-nlb-tg/b0315a2687eccd11"
     env:
       - name: SPRING_DATA_MONGODB_URI
         value: "mongodb+srv://erp_user:2dvZYzleqGYdyANc@erp-dev-cluster.4fboxqw.mongodb.net/erp"
       - name: EMPLOYEE_SERVICE_URL
-        value: "https://yvx3l9ifii.execute-api.ap-northeast-2.amazonaws.com/api/employees"
+        value: "https://04qnnzf1oa.execute-api.ap-northeast-2.amazonaws.com/api"  # Terraform 재배포 시 확인
       - name: NOTIFICATION_SERVICE_URL
         value: "http://notification-service:8084"
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
@@ -94,7 +98,7 @@ services:
     replicaCount: 2
     image:
       repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/approval-processing-service
-      tag: latest
+      tag: latest  # CI/CD에서 동적 태그 주입 권장
       pullPolicy: Always
     port: 8083
     resources:
@@ -109,7 +113,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/0bd3707f32e721cd"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-approval-proc-nlb-tg/7eb35a0cd579ef6f"
     env:
       - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
         value: "kafka.erp-dev.svc.cluster.local:9092"
@@ -137,7 +141,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/e8df94d1784737ee"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-employee-nlb-tg/ad1fbb25e204260d"
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://erp-dev-mysql.cniqqqqiyu1n.ap-northeast-2.rds.amazonaws.com:3306/erp?useSSL=true"
@@ -158,7 +162,7 @@ services:
     replicaCount: 2
     image:
       repository: 806332783810.dkr.ecr.ap-northeast-2.amazonaws.com/erp/notification-service
-      tag: latest
+      tag: latest  # CI/CD에서 동적 태그 주입 권장
       pullPolicy: Always
     port: 8084
     resources:
@@ -173,7 +177,7 @@ services:
       minReplicas: 2
       maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/671f2eb0a241a3f2"
+    targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:806332783810:targetgroup/erp-dev-notification-nlb-tg/b833b3784221d421"
     env:
       - name: REDIS_HOST
         value: "erp-dev-redis.jmz0hq.0001.apn2.cache.amazonaws.com"

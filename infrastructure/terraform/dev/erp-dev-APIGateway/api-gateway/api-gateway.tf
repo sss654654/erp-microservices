@@ -61,35 +61,7 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-# Integrations
-resource "aws_apigatewayv2_integration" "employee" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/employees/$request.path.proxy"
-  }
-}
-
-resource "aws_apigatewayv2_integration" "employee_root" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/employees"
-  }
-}
-
+# Integrations (3개 EKS 서비스만 - Employee는 Lambda 모듈에서 처리)
 resource "aws_apigatewayv2_integration" "approval_request" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "HTTP_PROXY"
@@ -160,19 +132,7 @@ resource "aws_apigatewayv2_integration" "notification_root" {
   }
 }
 
-# Routes
-resource "aws_apigatewayv2_route" "employee" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /api/employees/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.employee.id}"
-}
-
-resource "aws_apigatewayv2_route" "employee_root" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /api/employees"
-  target    = "integrations/${aws_apigatewayv2_integration.employee_root.id}"
-}
-
+# Routes (3개 EKS 서비스만 - Employee는 Lambda 모듈에서 처리)
 resource "aws_apigatewayv2_route" "approval_request" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /api/approvals/{proxy+}"
@@ -203,86 +163,4 @@ resource "aws_apigatewayv2_route" "notification_root" {
   target    = "integrations/${aws_apigatewayv2_integration.notification_root.id}"
 }
 
-# Attendance Integration
-resource "aws_apigatewayv2_integration" "attendance" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/attendance/$request.path.proxy"
-  }
-}
-
-resource "aws_apigatewayv2_route" "attendance" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /api/attendance/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.attendance.id}"
-}
-
-# Quests Integration
-resource "aws_apigatewayv2_integration" "quests" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/quests/$request.path.proxy"
-  }
-}
-
-resource "aws_apigatewayv2_route" "quests" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /api/quests/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.quests.id}"
-}
-
-# Quests POST route (for creating quests)
-resource "aws_apigatewayv2_integration" "quests_root" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/quests"
-  }
-}
-
-resource "aws_apigatewayv2_route" "quests_root" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "POST /api/quests"
-  target    = "integrations/${aws_apigatewayv2_integration.quests_root.id}"
-}
-
-# Leaves Integration
-resource "aws_apigatewayv2_integration" "leaves" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_method = "ANY"
-  integration_uri    = var.nlb_listener_arns["employee"]
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-
-  request_parameters = {
-    "overwrite:path" = "/leaves/$request.path.proxy"
-  }
-}
-
-resource "aws_apigatewayv2_route" "leaves" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /api/leaves/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.leaves.id}"
-}
+# Employee, Attendance, Quests, Leaves는 Lambda 모듈에서 처리

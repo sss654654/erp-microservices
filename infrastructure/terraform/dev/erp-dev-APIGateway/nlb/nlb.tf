@@ -14,27 +14,7 @@ resource "aws_lb" "nlb" {
   }
 }
 
-# NLB Target Groups (4개 서비스)
-resource "aws_lb_target_group" "employee" {
-  name        = "${var.project_name}-${var.environment}-employee-nlb-tg"
-  port        = 8081
-  protocol    = "TCP"
-  target_type = "ip"
-  vpc_id      = var.vpc_id
-
-  health_check {
-    enabled             = true
-    protocol            = "TCP"
-    interval            = 30
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-  }
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-employee-nlb-tg"
-  }
-}
-
+# NLB Target Groups (3개 EKS 서비스만)
 resource "aws_lb_target_group" "approval_request" {
   name        = "${var.project_name}-${var.environment}-approval-req-nlb-tg"
   port        = 8082
@@ -95,18 +75,7 @@ resource "aws_lb_target_group" "notification" {
   }
 }
 
-# NLB Listeners
-resource "aws_lb_listener" "employee" {
-  load_balancer_arn = aws_lb.nlb.arn
-  port              = 8081
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.employee.arn
-  }
-}
-
+# NLB Listeners (3개 EKS 서비스만)
 resource "aws_lb_listener" "approval_request" {
   load_balancer_arn = aws_lb.nlb.arn
   port              = 8082

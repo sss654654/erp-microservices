@@ -13,8 +13,9 @@ echo "=========================================="
 # Lambda 함수 업데이트
 if [ "$LAMBDA_CHANGED" = "true" ]; then
   echo "Updating Lambda function..."
+  LAMBDA_FUNCTION_NAME="erp-dev-employee-service"
   aws lambda update-function-code \
-    --function-name $PROJECT_NAME-$ENVIRONMENT-employee-service \
+    --function-name $LAMBDA_FUNCTION_NAME \
     --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_PREFIX/employee-service-lambda:$IMAGE_TAG \
     --region $AWS_REGION
   echo "✓ Lambda function updated"

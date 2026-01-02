@@ -51,17 +51,17 @@ resource "aws_security_group" "eks" {
   }
 }
 
-# ⚠️ 임시 주석: EKS 클러스터 생성 후 활성화
-# data "aws_eks_cluster" "main" {
-#   name = "erp-dev"
-# }
+# EKS 클러스터 생성 후 활성화
+data "aws_eks_cluster" "main" {
+  name = "erp-dev"
+}
 
-# resource "aws_security_group_rule" "eks_cluster_vpc_ingress" {
-#   type              = "ingress"
-#   from_port         = 0
-#   to_port           = 0
-#   protocol          = "-1"
-#   cidr_blocks       = [data.terraform_remote_state.vpc.outputs.vpc_cidr]
-#   security_group_id = data.aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
-#   description       = "Allow all traffic from VPC for NLB"
-# }
+resource "aws_security_group_rule" "eks_cluster_vpc_ingress" {
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["10.0.0.0/16"]
+  security_group_id = data.aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  description       = "Allow all traffic from VPC for NLB"
+}

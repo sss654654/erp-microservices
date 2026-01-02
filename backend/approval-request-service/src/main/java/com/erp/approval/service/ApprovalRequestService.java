@@ -29,6 +29,9 @@ public class ApprovalRequestService {
     @Value("${notification.service.url}")
     private String notificationServiceUrl;
     
+    @Value("${employee.service.url}")
+    private String employeeServiceUrl;
+    
     public ApprovalRequestService(ApprovalRequestRepository repository,
                                   EmployeeClient employeeClient,
                                   ApprovalRequestProducer approvalRequestProducer,
@@ -219,7 +222,7 @@ public class ApprovalRequestService {
             if ("ANNUAL_LEAVE".equals(approval.getType()) && approval.getLeaveDays() != null) {
                 // Employee Service에 연차 차감 요청
                 try {
-                    String url = "http://employee-service.erp-dev.svc.cluster.local:8081/employees/" 
+                    String url = employeeServiceUrl + "/employees/" 
                                 + approval.getRequesterId() + "/deduct-leave";
                     Map<String, Double> body = Map.of("days", approval.getLeaveDays());
                     restTemplate.postForEntity(url, body, String.class);
