@@ -78,3 +78,21 @@ resource "aws_iam_role_policy" "eks_node_cloudwatch_logs" {
     }]
   })
 }
+
+# X-Ray 권한
+resource "aws_iam_role_policy" "eks_node_xray" {
+  role = aws_iam_role.eks_node.name
+  name = "eks-node-xray-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ]
+      Resource = "*"
+    }]
+  })
+}
