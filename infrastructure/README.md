@@ -1058,6 +1058,221 @@ cd ../vpc && terraform destroy -auto-approve
 
 ---
 
+## 실시간 알림 구현 (WebSocket vs Polling)
+
+### 현재 구현: Polling 방식
+
+**구조:**
+```
+프론트엔드 → 5초마다 HTTP GET → API Gateway → notification-service
+```
+
+**코드:**
+```javascript
+// frontend/src/services/notificationService.js
+setInterval(async () => {
+  const response = await axios.get(`/notifications/recent/${employeeId}`);
+  // 알림 표시
+}, 5000);
+```
+
+**장점:**
+- 구현 단순 (HTTP만 사용)
+- 인프라 복잡도 낮음
+- 디버깅 쉬움
+- 비용 저렴
+
+**단점:**
+- 실시간성 낮음 (최대 5초 지연)
+- 불필요한 요청 발생 (알림 없어도 5초마다 요청)
+
+---
+
+### WebSocket 구현 시도 및 실패
+
+#### 문제 1: HTTPS → WS 연결 차단
+```
+CloudFront(HTTPS) → notification-service(WS)
+❌ 브라우저 보안 정책: HTTPS 페이지에서 WS(비암호화) 연결 차단
+```
+
+#### 해결 시도: API Gateway WebSocket API
+```
+CloudFront(HTTPS) → API Gateway(WSS) → NLB → notification-service(HTTP)
+```
+
+**Terraform 코드:**
+```hcl
+resource "aws_apigatewayv2_api" "websocket" {
+  name                       = "erp-dev-websocket"
+  protocol_type              = "WEBSOCKET"
+  route_selection_expression = "$request.body.action"
+}
+
+resource "aws_apigatewayv2_integration" "websocket" {
+  api_id           = aws_apigatewayv2_api.websocket.id
+  integration_type = "HTTP_PROXY"
+  integration_uri  = "http://${var.nlb_dns_name}:8084"
+}
+```
+
+**배포 결과:**
+- WebSocket URL: `wss://orqk1dg957.execute-api.ap-northeast-2.amazonaws.com/dev`
+- 연결 성공
+
+#### 문제 2: STOMP 프로토콜 불일치
+
+**Spring WebSocket 기대:**
+```
+CONNECT
+accept-version:1.2
+host:example.com
+
+SUBSCRIBE
+id:sub-0
+destination:/topic/notifications
+```
+
+**API Gateway 전달:**
+```json
+{
+  "requestContext": {...},
+  "body": "CONNECT\naccept-version:1.2\n\n"  // 단순 문자열
+}
+```
+
+**결과:**
+- API Gateway는 WebSocket 연결만 중계
+- STOMP 프레임 구조를 이해하지 못함
+- Spring이 STOMP 핸들러를 찾지 못해 연결 실패
+
+---
+
+### 프로덕션 환경 해결 방법
+
+#### 방법 1: NLB + Spring WebSocket 직접 노출 (권장)
+```
+Client → ALB(HTTPS) → NLB(TCP) → Spring WebSocket
+```
+
+**장점:**
+- STOMP 프로토콜 그대로 사용
+- API Gateway 없이 직접 연결
+- 가장 일반적인 실전 구성
+
+**단점:**
+- ACM 인증서 설정 필요
+- NLB 비용 추가 ($16/월)
+
+**구현:**
+```hcl
+resource "aws_lb" "websocket" {
+  name               = "erp-dev-websocket-nlb"
+  load_balancer_type = "network"
+  subnets            = var.public_subnet_ids
+}
+
+resource "aws_lb_listener" "websocket" {
+  load_balancer_arn = aws_lb.websocket.arn
+  port              = "443"
+  protocol          = "TLS"
+  certificate_arn   = var.acm_certificate_arn
+  
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.websocket.arn
+  }
+}
+```
+
+#### 방법 2: API Gateway WebSocket + Lambda (서버리스)
+```
+Client → API Gateway WebSocket → Lambda → DynamoDB (연결 관리)
+```
+
+**장점:**
+- 서버리스 아키텍처
+- 자동 스케일링
+- 연결당 과금 (유휴 시 비용 없음)
+
+**단점:**
+- Spring WebSocket 코드 전면 수정 필요
+- Lambda로 메시지 라우팅 직접 구현
+- 복잡도 증가
+
+**구현:**
+```javascript
+// Lambda: $connect
+exports.handler = async (event) => {
+  const connectionId = event.requestContext.connectionId;
+  await dynamodb.put({
+    TableName: 'WebSocketConnections',
+    Item: { connectionId, employeeId }
+  });
+};
+
+// Lambda: sendMessage
+const connections = await dynamodb.query({ employeeId });
+for (const conn of connections) {
+  await apigateway.postToConnection({
+    ConnectionId: conn.connectionId,
+    Data: JSON.stringify(message)
+  });
+}
+```
+
+#### 방법 3: 관리형 서비스 (대규모)
+```
+- AWS AppSync (GraphQL Subscriptions)
+- AWS IoT Core (MQTT)
+- Pusher, Ably 같은 SaaS
+```
+
+**장점:**
+- 수십만 동시접속 지원
+- 인프라 관리 불필요
+- 고가용성 보장
+
+**단점:**
+- 비용 높음
+- 벤더 종속
+
+---
+
+### 현업 선택 기준
+
+| 요구사항 | 선택 |
+|---------|------|
+| 알림이 1분 이내 도착하면 OK | **Polling** (현재 방식) |
+| 채팅, 실시간 협업 필요 | **NLB + Spring WebSocket** |
+| 동시접속 10만+ | **관리형 서비스** |
+| 서버 관리 싫음 | **API Gateway + Lambda** |
+
+**결재 시스템 권장:**
+- 폴링으로 충분 (5초 지연 허용)
+- WebSocket 인프라 관리 부담 > 실시간성 이점
+- 비용 효율적 (추가 인프라 불필요)
+
+---
+
+### 현재 구현 상태
+
+**배포된 리소스:**
+- API Gateway WebSocket API: `wss://orqk1dg957.execute-api.ap-northeast-2.amazonaws.com/dev`
+- 상태: 생성됨, 사용 안 함 (STOMP 불일치로 폴링 사용 중)
+
+**프론트엔드:**
+- notificationService.js: 5초 폴링 구현
+- WebSocket 코드: 주석 처리
+
+**향후 개선 시:**
+1. NLB + Spring WebSocket 직접 노출
+2. ACM 인증서 발급 (도메인 필요)
+3. ALB → NLB 라우팅 설정
+4. 프론트엔드 WebSocket 코드 활성화
+
+---
+
 ## 참고 문서
 
 **Terraform:**
